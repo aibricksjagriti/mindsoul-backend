@@ -1,6 +1,6 @@
 import dotenv from "dotenv";
 import app from "./app.js";
-import db from "./config/firestore.js";
+import { db } from "./config/firebase.js";
 
 dotenv.config();
 
@@ -8,9 +8,14 @@ const PORT = process.env.PORT || 3000;
 
 //connect to firestore
 async function testFirestore() {
-  await db.collection("test").doc("check").set({ status: "connected", time: new Date() });
+  await db
+    .collection("test")
+    .doc("check")
+    .set({ status: "connected", time: new Date() });
   console.log("Firestore connection successful");
 }
+
+
 
 testFirestore();
 
