@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import argon2 from "argon2";
-import { getUserByEmail, addUser } from "../models/userModel.js";
+
+import { db, auth } from "../config/firebase.js";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -10,81 +11,7 @@ if (!JWT_SECRET) {
   );
 }
 
-// //Signup
-// export const signup = async (req, res) => {
-//   try {
-//     const { name, email, password } = req.body;
-//     const existingUser = await getUserByEmail(email);
-//     if (existingUser)
-//       return res.status(400).json({
-//         msg: "User already exists",
-//       });
-
-//     const hashed = await argon2.hash(password);
-//     const user = {
-//       id: Date.now(),
-//       name,
-//       email,
-//       password: hashed,
-//     };
-//     addUser(user);
-
-//     const token = jwt.sign(
-//       {
-//         id: user.id,
-//         email,
-//       },
-//       JWT_SECRET,
-//       {
-//         expiresIn: "1h",
-//       }
-//     );
-
-//     res.status(201).json({ msg: "Signup successful", token });
-//   } catch (error) {
-//     console.log(error);
-//     res.status(500).json({ error: err.message });
-//   }
-// };
-
-// //Login
-// export const login = async (req, res) => {
-//   try {
-//     const { email, password } = req.body;
-//     const user = await getUserByEmail(email);
-
-//     if (!user)
-//       return res.status(400).json({
-//         msg: "Invalid credentials",
-//       });
-
-//     const valid = await argon2.verify(user.password, password);
-//     if (!valid) {
-//       return res.status(400).json({
-//         msg: "Invalid credentials",
-//       });
-//     }
-
-//     const token = jwt.sign(
-//       {
-//         id: user.id,
-//         email: email,
-//       },
-//       JWT_SECRET,
-//       {
-//         expiresIn: "1h",
-//       }
-//     );
-//     res.json({
-//       msg: "Login successful",
-//       token,
-//     });
-//   } catch (error) {
-//     console.log(error);
-//     res.status(500).json({ error: error.message });
-//   }
-// };
-
+//Signup code - firebase DB
 export const signup = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -97,23 +24,30 @@ export const signup = async (req, res) => {
     }
 
     //Check if user already exists
-    const existing = getUserByEmail(email);
-    if (existing) {
+    const usersRef = db.collection("users");
+    const existingUser = await usersRef.where("email", "==", email).get();
+    if (existingUser) {
       return res
         .status(409)
         .json({ success: false, message: "User already exists." });
     }
 
     //Hash password
-    const hashed = await argon2.hash(password);
+    const hashedPassword = await argon2.hash(password);
 
-    //Save new user
-    const user = { id: Date.now(), name, email, password: hashed };
-    addUser(user);
+    //create user document in firestore
+    const userRef = usersRef.doc(); //firestore auto-generates unique ID
+    await userRef.set({
+      name,
+      email,
+      password: hashedPassword,
+      authProvider: "email",
+      createdAt: new Date(),
+    });
 
     //Generate JWT
     const token = jwt.sign(
-      { id: user.id, email },
+      { id: userRef.id, email },
       JWT_SECRET || "fallback_secret",
       {
         expiresIn: "1h",
@@ -135,52 +69,120 @@ export const signup = async (req, res) => {
   }
 };
 
+//Login - firebase db
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    //Validate input
+    // Validate input
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Email and password are required." });
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required.",
+      });
     }
 
-    //Find user
-    const user = getUserByEmail(email);
-    if (!user) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Invalid credentials." });
+    // Find user in Firestore
+    const usersRef = db.collection("users");
+    const snapshot = await usersRef.where("email", "==", email).get();
+
+    if (snapshot.empty) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials.",
+      });
     }
 
-    //Verify password
-    const valid = await argon2.verify(user.password, password);
+    const userDoc = snapshot.docs[0];
+    const userData = userDoc.data();
+
+    // Verify password
+    const valid = await argon2.verify(userData.password, password);
     if (!valid) {
-      return res
-        .status(401)
-        .json({ success: false, message: "Invalid credentials." });
+      return res.status(401).json({
+        success: false,
+        message: "Invalid credentials.",
+      });
     }
 
-    //Generate token
+    // Generate JWT
     const token = jwt.sign(
-      { id: user.id, email },
+      { id: userDoc.id, email },
       JWT_SECRET || "fallback_secret",
-      {
-        expiresIn: "1h",
-      }
+      { expiresIn: "1h" }
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Login successful.",
-      data: { token },
+      data: {
+        token,
+        user: {
+          id: userDoc.id,
+          name: userData.name,
+          email: userData.email,
+          authProvider: userData.authProvider || "email",
+        },
+      },
     });
   } catch (error) {
     console.error("Login Error:", error);
     res.status(500).json({
       success: false,
       message: "Internal server error.",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+//google signin controller
+export const googleSignIn = async (req, res) => {
+  try {
+    const { idToken } = req.body; // Token from frontend
+    if (!idToken) {
+      return res
+        .status(400)
+        .json({ success: false, message: "ID token is required." });
+    }
+
+    // Verify Google ID token using Firebase Admin
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    const { uid, email, name, picture } = decodedToken;
+
+    // Reference to Firestore users collection
+    const userRef = db.collection("users").doc(uid);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      // Create new user record
+      await userRef.set({
+        name: name || "",
+        email,
+        picture: picture || "",
+        authProvider: "google",
+        createdAt: new Date(),
+      });
+    } else {
+      // Optionally update existing profile info
+      await userRef.update({
+        name: name || userDoc.data().name,
+        picture: picture || userDoc.data().picture,
+      });
+    }
+
+    // Generate custom JWT for backend
+    const token = jwt.sign({ uid, email }, JWT_SECRET, { expiresIn: "1h" });
+
+    return res.status(200).json({
+      success: true,
+      message: "Google Sign-In successful.",
+      data: { token, email, name, picture },
+    });
+  } catch (error) {
+    console.error("Google Sign-In Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Authentication failed.",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
