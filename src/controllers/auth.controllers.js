@@ -187,3 +187,115 @@ export const googleSignIn = async (req, res) => {
     });
   }
 };
+
+//openSession logic
+// export const openSession = async (req, res) => {
+//   try {
+//     const { idToken } = req.body;
+
+//     if (!idToken) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Missing Firebase ID token",
+//       });
+//     }
+
+//     //Verify firebase ID token
+//     const decoded = await auth.verifyIdToken(idToken);
+
+//     const { uid, email, name } = decoded;
+
+//     //Generate custom backend jwt
+//     const token = jwt.sign(
+//       { uid, email, name },
+//       process.env.JWT_SECRET || "fallback_secret",
+//       { expiresIn: "1h" }
+//     );
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Firebaes session verified successfully",
+//       data: { token, uid, email, name },
+//     });
+//   } catch (error) {
+//     console.error("openSession Error: ", error);
+//     return res.status(401).json({
+//       success: false,
+//       message: "Invalid or Expired Firebase ID token",
+//       error: process.env.NODE_ENV === "development" ? error.message : undefined,
+//     });
+//   }
+// };
+
+export const openSession = async (req, res) => {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing Firebase ID token",
+      });
+    }
+
+    // Verify Firebase ID token
+    const decoded = await auth.verifyIdToken(idToken);
+    const provider = decoded.firebase?.sign_in_provider;
+    const emailVerified = decoded.email_verified;
+
+    // Block unverified email/password users
+    if (provider === "password" && !emailVerified) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Email not verified. Please verify your email before signing in.",
+      });
+    }
+
+    const { uid, email, name, picture } = decoded;
+
+    // Sync user to Firestore
+    const userRef = db.collection("users").doc(uid);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      await userRef.set({
+        uid,
+        name: name || "",
+        email,
+        photoURL: picture || "",
+        authProvider: provider === "password" ? "email" : provider,
+        emailVerified: !!emailVerified,
+        createdAt: new Date(),
+        lastLogin: new Date(),
+      });
+    } else {
+      await userRef.update({
+        name: name || userDoc.data().name,
+        photoURL: picture || userDoc.data().photoURL,
+        emailVerified: !!emailVerified,
+        lastLogin: new Date(),
+      });
+    }
+
+    // Generate custom backend JWT
+    const token = jwt.sign(
+      { uid, email, name },
+      process.env.JWT_SECRET || "fallback_secret",
+      { expiresIn: "1h" }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Firebase session verified successfully",
+      data: { token, uid, email, name, emailVerified },
+    });
+  } catch (error) {
+    console.error("openSession Error: ", error);
+    return res.status(401).json({
+      success: false,
+      message: "Invalid or expired Firebase ID token",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
