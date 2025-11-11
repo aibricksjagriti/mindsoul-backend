@@ -621,3 +621,57 @@ export const getAppointment = async (req, res) => {
       .json({ message: "Failed to fetch appointment", error: error.message });
   }
 };
+
+// controller for updating an appointment
+// PATCH /api/counsellor/update-appointment
+export const updateAppointment = async (req, res) => {
+  try {
+    const { email, appointmentId, date, time, status, zoomLink, meta } = req.body;
+
+    if (!email || !appointmentId) {
+      return res.status(400).json({
+        message: "Email and appointmentId are required",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const counsellorRef = adminDb.collection("counsellors").doc(normalizedEmail);
+    const counsellorSnap = await counsellorRef.get();
+
+    if (!counsellorSnap.exists) {
+      return res.status(404).json({ message: "Counsellor not found" });
+    }
+
+    const appointmentRef = counsellorRef.collection("appointments").doc(appointmentId);
+    const appointmentSnap = await appointmentRef.get();
+
+    if (!appointmentSnap.exists) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    // Build update object only with provided fields
+    const updateFields = {
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+    if (date) updateFields.date = date;
+    if (time) updateFields.time = time;
+    if (status) updateFields.status = status; // e.g. scheduled, completed, cancelled
+    if (zoomLink) updateFields.zoomLink = zoomLink;
+    if (meta) updateFields.meta = meta;
+
+    await appointmentRef.update(updateFields);
+
+    const updatedSnap = await appointmentRef.get();
+
+    return res.status(200).json({
+      message: "Appointment updated successfully",
+      success: true,
+      appointment: updatedSnap.data(),
+    });
+  } catch (error) {
+    console.error("Error updating appointment:", error);
+    return res
+      .status(500)
+      .json({ message: "Failed to update appointment", error: error.message });
+  }
+};
