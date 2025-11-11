@@ -1,5 +1,5 @@
 import express from "express";
-import { createAppointment, sendOtp, updateProfile, verifyOtp, listAppointments } from "../controllers/counsellor.controllers.js";
+import { createAppointment, sendOtp, updateProfile, verifyOtp, listAppointments, getAppointment } from "../controllers/counsellor.controllers.js";
 
 
 const router = express.Router();
@@ -15,6 +15,8 @@ router.post("/update-profile", updateProfile);
 router.post("/create-appointment", createAppointment);
 
 router.get("/list-appointments", listAppointments);
+
+router.get("/get-appointment", getAppointment);
 
 
 
