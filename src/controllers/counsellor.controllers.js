@@ -581,7 +581,7 @@ export const listAppointments = async (req, res) => {
 //controller for getting appointment by id
 export const getAppointment = async (req, res) => {
   try {
-    const { email, appointmentId } = req.qurey;
+    const { email, appointmentId } = req.query;
 
     if (!email || !appointmentId) {
       return res
