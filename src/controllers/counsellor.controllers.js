@@ -623,7 +623,7 @@ export const getAppointment = async (req, res) => {
 };
 
 // controller for updating an appointment
-// PATCH /api/counsellor/update-appointment
+// PATCH 
 export const updateAppointment = async (req, res) => {
   try {
     const { email, appointmentId, date, time, status, zoomLink, meta } = req.body;
@@ -675,3 +675,57 @@ export const updateAppointment = async (req, res) => {
       .json({ message: "Failed to update appointment", error: error.message });
   }
 };
+
+// controller for cancelling an appointment
+// PATCH 
+export const cancelAppointment = async (req, res) => {
+  try {
+    const { email, appointmentId, cancelReason } = req.body;
+
+    if (!email || !appointmentId) {
+      return res.status(400).json({
+        message: "Email and appointmentId are required",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const counsellorRef = adminDb.collection("counsellors").doc(normalizedEmail);
+    const counsellorSnap = await counsellorRef.get();
+
+    if (!counsellorSnap.exists) {
+      return res.status(404).json({ message: "Counsellor not found" });
+    }
+
+    const appointmentRef = counsellorRef.collection("appointments").doc(appointmentId);
+    const appointmentSnap = await appointmentRef.get();
+
+    if (!appointmentSnap.exists) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    // Update appointment status to cancelled
+    const updateData = {
+      status: "cancelled",
+      cancelledAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    if (cancelReason) updateData.cancelReason = cancelReason;
+
+    await appointmentRef.update(updateData);
+
+    const updatedSnap = await appointmentRef.get();
+
+    return res.status(200).json({
+      message: "Appointment cancelled successfully",
+      success: true,
+      appointment: updatedSnap.data(),
+    });
+  } catch (error) {
+    console.error("Error cancelling appointment:", error);
+    return res
+      .status(500)
+      .json({ message: "Failed to cancel appointment", error: error.message });
+  }
+};
+
