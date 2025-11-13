@@ -21,14 +21,20 @@ const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
+
+
+     // REQUIRED FOR STORAGE 
+    storageBucket: "mindsoul-backend.firebasestorage.app"
   });
 }
 
 // Export both Firestore and Auth instances
 const db = admin.firestore();
 const auth = admin.auth();
+const storage = admin.storage(); //for image storage
+
 
 //Alias admindb (for clarity in controllers)
 const adminDb = db;
 
-export { db, auth, adminDb };
+export { db, auth, adminDb, storage };
