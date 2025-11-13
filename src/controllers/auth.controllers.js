@@ -188,45 +188,6 @@ export const googleSignIn = async (req, res) => {
   }
 };
 
-//openSession logic
-// export const openSession = async (req, res) => {
-//   try {
-//     const { idToken } = req.body;
-
-//     if (!idToken) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Missing Firebase ID token",
-//       });
-//     }
-
-//     //Verify firebase ID token
-//     const decoded = await auth.verifyIdToken(idToken);
-
-//     const { uid, email, name } = decoded;
-
-//     //Generate custom backend jwt
-//     const token = jwt.sign(
-//       { uid, email, name },
-//       process.env.JWT_SECRET || "fallback_secret",
-//       { expiresIn: "1h" }
-//     );
-
-//     return res.status(200).json({
-//       success: true,
-//       message: "Firebaes session verified successfully",
-//       data: { token, uid, email, name },
-//     });
-//   } catch (error) {
-//     console.error("openSession Error: ", error);
-//     return res.status(401).json({
-//       success: false,
-//       message: "Invalid or Expired Firebase ID token",
-//       error: process.env.NODE_ENV === "development" ? error.message : undefined,
-//     });
-//   }
-// };
-
 export const openSession = async (req, res) => {
   try {
     const { idToken } = req.body;
