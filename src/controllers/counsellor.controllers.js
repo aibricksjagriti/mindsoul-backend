@@ -1,4 +1,4 @@
-import { adminDb } from "../config/firebase.js";
+import { adminDb, storage } from "../config/firebase.js";
 import admin from "firebase-admin";
 import nodemailer from "nodemailer";
 import { getOtpEmailHtml } from "../utils/emailTemplate.js";
@@ -193,88 +193,185 @@ export const verifyOtp = async (req, res) => {
 };
 
 //Controller for update profile COUNSELLOR
+// export const updateProfile = async (req, res) => {
+//   try {
+//     const {
+//       email, // required (use same email used for OTP)
+//       firstName,
+//       lastName,
+//       phoneNumber,
+//       description,
+//       expertise,
+//       workingHours,
+//       workingDays, // expected array of strings
+//     } = req.body;
+
+//     if (!email) {
+//       return res.status(400).json({ message: "Email is required" });
+//     }
+
+//     const normalizedEmail = email.trim().toLowerCase();
+//     const counsellorRef = adminDb
+//       .collection("counsellors")
+//       .doc(normalizedEmail);
+//     const counsellorSnap = await counsellorRef.get();
+
+//     // Require existing verified counsellor
+//     if (!counsellorSnap.exists) {
+//       return res.status(404).json({ message: "Counsellor record not found" });
+//     }
+
+//     const counsellorData = counsellorSnap.data();
+//     if (!counsellorData.isVerified) {
+//       return res.status(403).json({
+//         message: "Counsellor not verified. Complete OTP verification first.",
+//       });
+//     }
+
+//     // Build profileData object only with provided values
+//     const profileData = {};
+//     if (firstName !== undefined) profileData.firstName = firstName;
+//     if (lastName !== undefined) profileData.lastName = lastName;
+//     if (phoneNumber !== undefined) profileData.phoneNumber = phoneNumber;
+//     if (description !== undefined) profileData.description = description;
+//     if (expertise !== undefined) profileData.expertise = expertise;
+//     if (workingHours !== undefined) profileData.workingHours = workingHours;
+//     if (workingDays !== undefined) {
+//       if (!Array.isArray(workingDays)) {
+//         return res
+//           .status(400)
+//           .json({ message: "workingDays must be an array" });
+//       }
+//       profileData.workingDays = workingDays;
+//     }
+
+//     // At minimum require names before marking profileCompleted (optional rule)
+//     // If you want to enforce required fields, uncomment below:
+//     // if (!profileData.firstName || !profileData.lastName) {
+//     //   return res.status(400).json({ message: "First name and last name are required." });
+//     // }
+
+//     // Update counsellor document (merge)
+//     const updatePayload = {
+//       profileCompleted: true,
+//       profileData,
+//       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+//       // remove deleteAt so it won't be auto-deleted by any cleanup logic
+//       deleteAt: admin.firestore.FieldValue.delete(),
+//     };
+
+//     await counsellorRef.set(updatePayload, { merge: true });
+
+//     // Return the fresh document
+//     const updatedSnap = await counsellorRef.get();
+//     return res.status(200).json({
+//       message: "Profile updated successfully",
+//       success: true,
+//       counsellor: updatedSnap.data(),
+//     });
+//   } catch (error) {
+//     console.error("Error updating counsellor profile:", error);
+//     return res
+//       .status(500)
+//       .json({ message: "Failed to update profile", error: error.message });
+//   }
+// };
 export const updateProfile = async (req, res) => {
   try {
     const {
-      email, // required (use same email used for OTP)
+      email,
       firstName,
       lastName,
       phoneNumber,
       description,
       expertise,
       workingHours,
-      workingDays, // expected array of strings
+      workingDays,
     } = req.body;
 
     if (!email) {
-      return res.status(400).json({ message: "Email is required" });
+      return res.status(400).json({ success: false, message: "Email is required" });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const counsellorRef = adminDb
-      .collection("counsellors")
-      .doc(normalizedEmail);
+    const counsellorRef = adminDb.collection("counsellors").doc(normalizedEmail);
     const counsellorSnap = await counsellorRef.get();
 
-    // Require existing verified counsellor
     if (!counsellorSnap.exists) {
-      return res.status(404).json({ message: "Counsellor record not found" });
+      return res.status(404).json({ success: false, message: "Counsellor record not found" });
     }
 
     const counsellorData = counsellorSnap.data();
+
     if (!counsellorData.isVerified) {
       return res.status(403).json({
+        success: false,
         message: "Counsellor not verified. Complete OTP verification first.",
       });
     }
 
-    // Build profileData object only with provided values
+    // ------------------ BUILD PROFILE DATA ---------------------
     const profileData = {};
-    if (firstName !== undefined) profileData.firstName = firstName;
-    if (lastName !== undefined) profileData.lastName = lastName;
-    if (phoneNumber !== undefined) profileData.phoneNumber = phoneNumber;
-    if (description !== undefined) profileData.description = description;
-    if (expertise !== undefined) profileData.expertise = expertise;
-    if (workingHours !== undefined) profileData.workingHours = workingHours;
-    if (workingDays !== undefined) {
+
+    if (firstName) profileData.firstName = firstName;
+    if (lastName) profileData.lastName = lastName;
+    if (phoneNumber) profileData.phoneNumber = phoneNumber;
+    if (description) profileData.description = description;
+    if (expertise) profileData.expertise = expertise;
+    if (workingHours) profileData.workingHours = workingHours;
+
+    if (workingDays) {
       if (!Array.isArray(workingDays)) {
-        return res
-          .status(400)
-          .json({ message: "workingDays must be an array" });
+        return res.status(400).json({
+          success: false,
+          message: "workingDays must be an array",
+        });
       }
       profileData.workingDays = workingDays;
     }
 
-    // At minimum require names before marking profileCompleted (optional rule)
-    // If you want to enforce required fields, uncomment below:
-    // if (!profileData.firstName || !profileData.lastName) {
-    //   return res.status(400).json({ message: "First name and last name are required." });
-    // }
+    // ------------------ IMAGE UPLOAD LOGIC ---------------------
+    if (req.file) {
+      const bucket = storage.bucket();
+      const fileName = `counsellor-images/${normalizedEmail}-${Date.now()}`;
+      const file = bucket.file(fileName);
 
-    // Update counsellor document (merge)
+      await file.save(req.file.buffer, {
+        metadata: { contentType: req.file.mimetype },
+        public: true,
+      });
+
+      const imageUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`;
+      profileData.imageUrl = imageUrl;
+    }
+
+    // ------------------ FINAL FIRESTORE UPDATE -----------------
     const updatePayload = {
-      profileCompleted: true,
       profileData,
+      profileCompleted: true,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      // remove deleteAt so it won't be auto-deleted by any cleanup logic
       deleteAt: admin.firestore.FieldValue.delete(),
     };
 
     await counsellorRef.set(updatePayload, { merge: true });
 
-    // Return the fresh document
     const updatedSnap = await counsellorRef.get();
+
     return res.status(200).json({
-      message: "Profile updated successfully",
       success: true,
+      message: "Profile updated successfully",
       counsellor: updatedSnap.data(),
     });
+
   } catch (error) {
     console.error("Error updating counsellor profile:", error);
-    return res
-      .status(500)
-      .json({ message: "Failed to update profile", error: error.message });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update profile",
+      error: error.message,
+    });
   }
 };
+
 
 
