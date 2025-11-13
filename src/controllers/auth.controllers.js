@@ -13,7 +13,7 @@ if (!JWT_SECRET) {
 
 //Signup code - firebase DB
 export const signup = async (req, res) => {
-  try {
+  try { 
     const { name, email, password } = req.body;
 
     //Validate input
@@ -26,7 +26,7 @@ export const signup = async (req, res) => {
     //Check if user already exists
     const usersRef = db.collection("users");
     const existingUser = await usersRef.where("email", "==", email).get();
-    if (existingUser) {
+    if (!existingUser.empty) {
       return res
         .status(409)
         .json({ success: false, message: "User already exists." });
