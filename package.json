@@ -29,6 +29,7 @@
     "firebase": "^12.5.0",
     "firebase-admin": "^13.5.0",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
     "nodemailer": "^7.0.10"
   },
   "devDependencies": {
