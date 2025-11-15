@@ -2,18 +2,17 @@ import jwt from "jsonwebtoken";
 import argon2 from "argon2";
 
 import { db, auth } from "../config/firebase.js";
+import admin from "firebase-admin";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
-  console.warn(
-    "Warning: JWT_SECRET is not set. Using fallback secret (unsafe for production)."
-  );
+  console.warn("Warning: JWT_SECRET is not set. Using fallback secret.");
 }
 
 //Signup code - firebase DB
 export const signup = async (req, res) => {
-  try { 
+  try {
     const { name, email, password } = req.body;
 
     //Validate input
@@ -47,17 +46,33 @@ export const signup = async (req, res) => {
 
     //Generate JWT
     const token = jwt.sign(
-      { id: userRef.id, email },
+      { id: userRef.id, email, role: "user" },
       JWT_SECRET || "fallback_secret",
       {
-        expiresIn: "1h",
+        expiresIn: "2d",
       }
     );
+
+    // set a cookie with the token
+    res.cookie("mindsoul_token", token, {
+      httpOnly: true,
+      secure: true, // true in production / https
+      sameSite: "None",
+      maxAge: 2 * 24 * 60 * 60 * 1000, // 2 days
+    });
 
     res.status(201).json({
       success: true,
       message: "Signup successful.",
-      data: { token },
+      data: {
+        token,
+        user: {
+          id: userRef.id,
+          name,
+          email,
+          authProvider: "email",
+        },
+      },
     });
   } catch (error) {
     console.error("Signup Error:", error);
@@ -107,10 +122,18 @@ export const login = async (req, res) => {
 
     // Generate JWT
     const token = jwt.sign(
-      { id: userDoc.id, email },
+      { id: userDoc.id, email, role: userData.role || "user" },
       JWT_SECRET || "fallback_secret",
-      { expiresIn: "1h" }
+      { expiresIn: "2h" }
     );
+
+    // New : set cookie for jwt
+    res.cookie("mindsoul_token", token, {
+      httpOnly: true,
+      secure: true, // must be true in production (HTTPS)
+      sameSite: "None",
+      maxAge: 2 * 24 * 60 * 60 * 1000, // 2 days
+    });
 
     return res.status(200).json({
       success: true,
@@ -122,6 +145,7 @@ export const login = async (req, res) => {
           name: userData.name,
           email: userData.email,
           authProvider: userData.authProvider || "email",
+          role: userData.role || "user",
         },
       },
     });
@@ -171,7 +195,17 @@ export const googleSignIn = async (req, res) => {
     }
 
     // Generate custom JWT for backend
-    const token = jwt.sign({ uid, email }, JWT_SECRET, { expiresIn: "1h" });
+    const token = jwt.sign({ id: uid, email, role: "user" }, JWT_SECRET, {
+      expiresIn: "2d",
+    });
+
+    // NEW: Set cookie for JWT
+    res.cookie("mindsoul_token", token, {
+      httpOnly: true,
+      secure: true, // true in production (HTTPS)
+      sameSite: "None",
+      maxAge: 2 * 24 * 60 * 60 * 1000, // 2 days
+    });
 
     return res.status(200).json({
       success: true,
