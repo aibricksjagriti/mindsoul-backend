@@ -16,12 +16,12 @@ export const createAppointment = async (req, res) => {
 
     const {
       counsellorEmail,
-      date, // 'YYYY-MM-DD'
-      time, // 'HH:MM'
+      date,
+      timeSlot, // e.g. "09:00-09:30"
       meta = {},
     } = req.body;
 
-    if (!counsellorEmail || !date || !time) {
+    if (!counsellorEmail || !date || !timeSlot) {
       return res
         .status(400)
         .json({ message: "counsellorEmail, date and time are required" });
@@ -30,6 +30,11 @@ export const createAppointment = async (req, res) => {
     // Validate date format
     if (isNaN(Date.parse(`${date}T00:00:00`))) {
       return res.status(400).json({ message: "Invalid date format" });
+    }
+
+    //validate time slot
+    if (!timeSlot || !timeSlot.includes("-")) {
+      return res.status(400).json({ message: "Invalid time slot format" });
     }
 
     const normalizedCounsellorEmail = String(counsellorEmail)
@@ -54,7 +59,7 @@ export const createAppointment = async (req, res) => {
       .collection("appointments")
       .where("counsellorId", "==", normalizedCounsellorEmail)
       .where("date", "==", date)
-      .where("time", "==", time)
+      .where("timeSlot", "==", timeSlot)
       .limit(1)
       .get();
 
