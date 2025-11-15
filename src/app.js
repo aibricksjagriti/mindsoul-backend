@@ -4,6 +4,7 @@ import authRoutes from "../src/routes/auth.routes.js"
 import counsellorRoutes from "../src/routes/counsellor.routes.js"
 import appointmentRoutes from "../src/routes/appointment.routes.js"
 import userRoutes from "../src/routes/user.routes.js"
+import cookieParser from "cookie-parser";
 
 
 //app config
@@ -13,6 +14,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 
 //routes
