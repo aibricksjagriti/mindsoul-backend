@@ -2,6 +2,7 @@ import { adminDb, storage } from "../config/firebase.js";
 import admin from "firebase-admin";
 import nodemailer from "nodemailer";
 import { getOtpEmailHtml } from "../utils/emailTemplate.js";
+import jwt from "jsonwebtoken";
 
 //This is helper function to encode email for firestore
 const encodeEmail = (email) => email.replace(/\./g, "_");
@@ -171,6 +172,25 @@ export const verifyOtp = async (req, res) => {
       });
     }
 
+    // ---------------------- NEW: Generate JWT ----------------------
+    const token = jwt.sign(
+      {
+        id: normalizedEmail,
+        email: normalizedEmail,
+        role: "counsellor",
+      },
+      process.env.JWT_SECRET || "fallback_secret",
+      { expiresIn: "2d" }
+    );
+
+    // ---------------------- NEW: Set Cookie -------------------------
+    res.cookie("mindsoul_token", token, {
+      httpOnly: true,
+      secure: true, // true in production HTTPS
+      sameSite: "None",
+      maxAge: 2 * 24 * 60 * 60 * 1000, // 2 days
+    });
+
     // Mark OTP verified & cleanup
     await otpDoc.ref.update({ verified: true });
     await otpDoc.ref.delete();
@@ -291,15 +311,21 @@ export const updateProfile = async (req, res) => {
     } = req.body;
 
     if (!email) {
-      return res.status(400).json({ success: false, message: "Email is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Email is required" });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const counsellorRef = adminDb.collection("counsellors").doc(normalizedEmail);
+    const counsellorRef = adminDb
+      .collection("counsellors")
+      .doc(normalizedEmail);
     const counsellorSnap = await counsellorRef.get();
 
     if (!counsellorSnap.exists) {
-      return res.status(404).json({ success: false, message: "Counsellor record not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Counsellor record not found" });
     }
 
     const counsellorData = counsellorSnap.data();
@@ -364,7 +390,6 @@ export const updateProfile = async (req, res) => {
       message: "Profile updated successfully",
       counsellor: updatedSnap.data(),
     });
-
   } catch (error) {
     console.error("Error updating counsellor profile:", error);
     return res.status(500).json({
@@ -374,6 +399,3 @@ export const updateProfile = async (req, res) => {
     });
   }
 };
-
-
-
