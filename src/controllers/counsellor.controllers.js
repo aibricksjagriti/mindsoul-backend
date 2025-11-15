@@ -285,6 +285,7 @@ export const updateProfile = async (req, res) => {
       phoneNumber,
       description,
       expertise,
+      experience,
       workingHours,
       workingDays,
     } = req.body;
@@ -318,6 +319,7 @@ export const updateProfile = async (req, res) => {
     if (phoneNumber) profileData.phoneNumber = phoneNumber;
     if (description) profileData.description = description;
     if (expertise) profileData.expertise = expertise;
+    if (experience) profileData.experience = experience;
     if (workingHours) profileData.workingHours = workingHours;
 
     if (workingDays) {
