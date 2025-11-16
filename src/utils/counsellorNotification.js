@@ -2,7 +2,7 @@ export function counsellorNotificationTemplate({
   counsellorName,
   studentName,
   date,
-  time,
+  timeSlot,
   startUrl,
 }) {
   return `
@@ -41,8 +41,8 @@ export function counsellorNotificationTemplate({
               <td style="padding:10px 0; color:#333;">${date}</td>
             </tr>
             <tr>
-              <td style="padding:10px 0; color:#555; font-weight:600;">Time</td>
-              <td style="padding:10px 0; color:#333;">${time}</td>
+              <td style="padding:10px 0; color:#555; font-weight:600;">timeSlot</td>
+              <td style="padding:10px 0; color:#333;">${timeSlot}</td>
             </tr>
             <tr>
               <td style="padding:10px 0; color:#555; font-weight:600;">Host Link</td>
