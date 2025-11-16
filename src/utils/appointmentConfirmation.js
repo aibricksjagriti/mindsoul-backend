@@ -2,7 +2,7 @@ export function appointmentConfirmationTemplate({
   studentName,
   counsellorName,
   date,
-  time,
+  timeSlot,
   zoomLink,
 }) {
   return `
@@ -31,8 +31,8 @@ export function appointmentConfirmationTemplate({
           <td style="padding:10px; border-bottom:1px solid #eee;">${date}</td>
         </tr>
         <tr>
-          <td style="padding:10px; border-bottom:1px solid #eee; font-weight:bold;">Time:</td>
-          <td style="padding:10px; border-bottom:1px solid #eee;">${time}</td>
+          <td style="padding:10px; border-bottom:1px solid #eee; font-weight:bold;">timeSlot:</td>
+          <td style="padding:10px; border-bottom:1px solid #eee;">${timeSlot}</td>
         </tr>
         <tr>
           <td style="padding:10px; font-weight:bold;">Zoom Meeting Link:</td>
