@@ -46,7 +46,7 @@ export const signup = async (req, res) => {
 
     //Generate JWT
     const token = jwt.sign(
-      { id: userRef.id, email, role: "user" },
+      { id: userRef.id, email, name, role: "user" },
       JWT_SECRET || "fallback_secret",
       {
         expiresIn: "2d",
@@ -122,7 +122,12 @@ export const login = async (req, res) => {
 
     // Generate JWT
     const token = jwt.sign(
-      { id: userDoc.id, email, role: userData.role || "user" },
+      {
+        id: userDoc.id,
+        email,
+        name: userData.name,
+        role: userData.role || "user",
+      },
       JWT_SECRET || "fallback_secret",
       { expiresIn: "2h" }
     );
@@ -195,9 +200,13 @@ export const googleSignIn = async (req, res) => {
     }
 
     // Generate custom JWT for backend
-    const token = jwt.sign({ id: uid, email, role: "user" }, JWT_SECRET, {
-      expiresIn: "2d",
-    });
+    const token = jwt.sign(
+      { id: uid, email, name: name || "", role: "user" },
+      JWT_SECRET,
+      {
+        expiresIn: "2d",
+      }
+    );
 
     // NEW: Set cookie for JWT
     res.cookie("mindsoul_token", token, {
