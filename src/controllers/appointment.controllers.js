@@ -4,6 +4,7 @@ import { emailClient } from "../services/emailService.js";
 import { appointmentConfirmationTemplate } from "../utils/appointmentConfirmation.js";
 import { counsellorNotificationTemplate } from "../utils/counsellorNotification.js";
 
+// const nowTs = () => admin.firestore.FieldValue.servertimeSlotstamp();
 const nowTs = () => admin.firestore.FieldValue.serverTimestamp();
 
 import { createZoomMeeting } from "../services/createZoomMeeting.js";
@@ -24,7 +25,7 @@ export const createAppointment = async (req, res) => {
     if (!counsellorEmail || !date || !timeSlot) {
       return res
         .status(400)
-        .json({ message: "counsellorEmail, date and time are required" });
+        .json({ message: "counsellorEmail, date and timeSlot are required" });
     }
 
     // Validate date format
@@ -32,9 +33,9 @@ export const createAppointment = async (req, res) => {
       return res.status(400).json({ message: "Invalid date format" });
     }
 
-    //validate time slot
+    //validate timeSlot slot
     if (!timeSlot || !timeSlot.includes("-")) {
-      return res.status(400).json({ message: "Invalid time slot format" });
+      return res.status(400).json({ message: "Invalid timeSlot slot format" });
     }
 
     const normalizedCounsellorEmail = String(counsellorEmail)
@@ -54,7 +55,7 @@ export const createAppointment = async (req, res) => {
       return res.status(403).json({ message: "Counsellor not verified" });
     }
 
-    // Check time conflict
+    // Check timeSlot conflict
     const conflictQuery = await adminDb
       .collection("appointments")
       .where("counsellorId", "==", normalizedCounsellorEmail)
@@ -64,7 +65,7 @@ export const createAppointment = async (req, res) => {
       .get();
 
     if (!conflictQuery.empty) {
-      return res.status(409).json({ message: "Time slot already booked" });
+      return res.status(409).json({ message: "timeSlot slot already booked" });
     }
 
     // -------------------------------------------------
@@ -79,7 +80,7 @@ export const createAppointment = async (req, res) => {
     const zoomMeeting = await createZoomMeeting(
       process.env.ZOOM_HOST_EMAIL, // Single Zoom host
       date,
-      time,
+      timeSlot,
       "Counselling Session"
     );
 
@@ -103,7 +104,7 @@ export const createAppointment = async (req, res) => {
       studentId: user.uid,
       studentEmail: user.email || null,
       date,
-      time,
+      timeSlot,
       zoomLink: actualZoomLink, // <---- UPDATED
       meta,
       status: "scheduled",
@@ -140,7 +141,7 @@ export const createAppointment = async (req, res) => {
         studentName: user.displayName || user.email,
         counsellorName,
         date,
-        time,
+        timeSlot,
         zoomLink: actualZoomLink,
       });
 
@@ -170,7 +171,7 @@ export const createAppointment = async (req, res) => {
         counsellorName,
         studentName: user.displayName || user.email,
         date,
-        time,
+        timeSlot,
         startUrl: zoomMeeting.startUrl, // uses startUrl returned from Zoom
       });
 
@@ -197,93 +198,3 @@ export const createAppointment = async (req, res) => {
       .json({ message: "Internal server error", error: err.message });
   }
 };
-
-// export const createAppointment = async (req, res) => {
-//   try {
-//     // req.user must be set by auth middleware (uid, email, displayName, etc.)
-//     const user = req.user;
-//     if (!user) return res.status(401).json({ message: "Unauthorized" });
-
-//     const {
-//       counsellorEmail,
-//       date,      // 'YYYY-MM-DD'
-//       time,      // 'HH:MM'
-//       meta = {},
-//       zoomLink = null,
-//     } = req.body;
-
-//     if (!counsellorEmail || !date || !time) {
-//       return res.status(400).json({ message: "counsellorEmail, date and time are required" });
-//     }
-
-//     const normalizedCounsellorEmail = String(counsellorEmail).trim().toLowerCase();
-//     const counsellorRef = adminDb.collection("counsellors").doc(normalizedCounsellorEmail);
-//     const counsellorSnap = await counsellorRef.get();
-
-//     if (!counsellorSnap.exists) {
-//       return res.status(404).json({ message: "Counsellor not found" });
-//     }
-//     const counsellorData = counsellorSnap.data();
-//     if (!counsellorData.isVerified) {
-//       return res.status(403).json({ message: "Counsellor not verified" });
-//     }
-
-//     // Optional: check counsellor availability for date/time here
-//     // (e.g., ensure no conflicting appointment exists). Example quick check:
-//     const conflictQuery = await adminDb
-//       .collection("appointments")
-//       .where("counsellorId", "==", normalizedCounsellorEmail)
-//       .where("date", "==", date)
-//       .where("time", "==", time)
-//       .limit(1)
-//       .get();
-//     if (!conflictQuery.empty) {
-//       return res.status(409).json({ message: "Time slot already booked" });
-//     }
-
-//     // Create appointment doc in top-level collection with generated id
-//     const appointmentRef = adminDb.collection("appointments").doc();
-//     const appointmentId = appointmentRef.id;
-
-//     const payload = {
-//       id: appointmentId,
-//       counsellorId: normalizedCounsellorEmail,
-//       counsellorProfileSnapshot: {
-//         firstName: counsellorData?.profileData?.firstName ?? null,
-//         lastName: counsellorData?.profileData?.lastName ?? null,
-//         expertise: counsellorData?.profileData?.expertise ?? null,
-//       },
-//       studentId: user.uid,
-//       studentEmail: user.email || null,
-//       date,
-//       time,
-//       zoomLink,
-//       meta,
-//       status: "scheduled",
-//       createdAt: nowTs(),
-//       updatedAt: nowTs(),
-//     };
-
-//     // Use a batch to write atomically to three locations
-//     const batch = adminDb.batch();
-
-//     // top-level
-//     batch.set(appointmentRef, payload);
-
-//     // mirror under counsellor subcollection
-//     const counsellorAppointmentsRef = counsellorRef.collection("appointments").doc(appointmentId);
-//     batch.set(counsellorAppointmentsRef, payload);
-
-//     // mirror under user subcollection
-//     const userRef = adminDb.collection("users").doc(user.uid);
-//     const userAppointmentsRef = userRef.collection("appointments").doc(appointmentId);
-//     batch.set(userAppointmentsRef, payload);
-
-//     await batch.commit();
-
-//     return res.status(201).json({ success: true, message: "Appointment created", appointment: payload });
-//   } catch (err) {
-//     console.error("createAppointment error:", err);
-//     return res.status(500).json({ message: "Internal server error", error: err.message });
-//   }
-// };
