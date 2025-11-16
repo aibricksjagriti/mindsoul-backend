@@ -13,7 +13,7 @@ export function counsellorNotificationTemplate({
       <!-- Header -->
       <div style="background:#7A3CFF; padding:22px 30px;">
         <h1 style="color:white; margin:0; font-size:24px; font-weight:600;">
-          New Appointment Scheduled
+          Hello, Counsellor! New Appointment Scheduled
         </h1>
       </div>
 
