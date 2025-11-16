@@ -138,7 +138,7 @@ export const createAppointment = async (req, res) => {
         (counsellorData?.profileData?.lastName || "");
 
       const html = appointmentConfirmationTemplate({
-        studentName: user.displayName || user.email,
+        studentName: user.name || user.email,
         counsellorName,
         date,
         timeSlot,
@@ -148,7 +148,7 @@ export const createAppointment = async (req, res) => {
       await emailClient.sendMail({
         from: `MINDSOUL <${process.env.MAIL_USER}>`,
         to: user.email,
-        subject: "Your Counselling Appointment is Confirmed",
+        subject: "Hello User,Your Counselling Appointment is Confirmed",
         html,
       });
     } catch (mailErr) {
@@ -169,7 +169,8 @@ export const createAppointment = async (req, res) => {
 
       const counsellorHtml = counsellorNotificationTemplate({
         counsellorName,
-        studentName: user.displayName || user.email,
+        studentName: user.name || user.email,
+        studentEmail: user.email,
         date,
         timeSlot,
         startUrl: zoomMeeting.startUrl, // uses startUrl returned from Zoom
@@ -178,7 +179,7 @@ export const createAppointment = async (req, res) => {
       await emailClient.sendMail({
         from: `MINDSOUL <${process.env.MAIL_USER}>`,
         to: counsellorEmailForMail,
-        subject: "You have a new counselling appointment",
+        subject: "Hello Counsellor, You have a new appointment",
         html: counsellorHtml,
       });
     } catch (cMailErr) {
