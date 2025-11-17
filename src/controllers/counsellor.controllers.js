@@ -3,6 +3,7 @@ import admin from "firebase-admin";
 import nodemailer from "nodemailer";
 import { getOtpEmailHtml } from "../utils/emailTemplate.js";
 import jwt from "jsonwebtoken";
+import { filterCounsellorsService } from "../services/counsellorFilter.service.js";
 
 //This is helper function to encode email for firestore
 const encodeEmail = (email) => email.replace(/\./g, "_");
@@ -212,98 +213,18 @@ export const verifyOtp = async (req, res) => {
   }
 };
 
-//Controller for update profile COUNSELLOR
-// export const updateProfile = async (req, res) => {
-//   try {
-//     const {
-//       email, // required (use same email used for OTP)
-//       firstName,
-//       lastName,
-//       phoneNumber,
-//       description,
-//       expertise,
-//       workingHours,
-//       workingDays, // expected array of strings
-//     } = req.body;
-
-//     if (!email) {
-//       return res.status(400).json({ message: "Email is required" });
-//     }
-
-//     const normalizedEmail = email.trim().toLowerCase();
-//     const counsellorRef = adminDb
-//       .collection("counsellors")
-//       .doc(normalizedEmail);
-//     const counsellorSnap = await counsellorRef.get();
-
-//     // Require existing verified counsellor
-//     if (!counsellorSnap.exists) {
-//       return res.status(404).json({ message: "Counsellor record not found" });
-//     }
-
-//     const counsellorData = counsellorSnap.data();
-//     if (!counsellorData.isVerified) {
-//       return res.status(403).json({
-//         message: "Counsellor not verified. Complete OTP verification first.",
-//       });
-//     }
-
-//     // Build profileData object only with provided values
-//     const profileData = {};
-//     if (firstName !== undefined) profileData.firstName = firstName;
-//     if (lastName !== undefined) profileData.lastName = lastName;
-//     if (phoneNumber !== undefined) profileData.phoneNumber = phoneNumber;
-//     if (description !== undefined) profileData.description = description;
-//     if (expertise !== undefined) profileData.expertise = expertise;
-//     if (workingHours !== undefined) profileData.workingHours = workingHours;
-//     if (workingDays !== undefined) {
-//       if (!Array.isArray(workingDays)) {
-//         return res
-//           .status(400)
-//           .json({ message: "workingDays must be an array" });
-//       }
-//       profileData.workingDays = workingDays;
-//     }
-
-//     // At minimum require names before marking profileCompleted (optional rule)
-//     // If you want to enforce required fields, uncomment below:
-//     // if (!profileData.firstName || !profileData.lastName) {
-//     //   return res.status(400).json({ message: "First name and last name are required." });
-//     // }
-
-//     // Update counsellor document (merge)
-//     const updatePayload = {
-//       profileCompleted: true,
-//       profileData,
-//       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-//       // remove deleteAt so it won't be auto-deleted by any cleanup logic
-//       deleteAt: admin.firestore.FieldValue.delete(),
-//     };
-
-//     await counsellorRef.set(updatePayload, { merge: true });
-
-//     // Return the fresh document
-//     const updatedSnap = await counsellorRef.get();
-//     return res.status(200).json({
-//       message: "Profile updated successfully",
-//       success: true,
-//       counsellor: updatedSnap.data(),
-//     });
-//   } catch (error) {
-//     console.error("Error updating counsellor profile:", error);
-//     return res
-//       .status(500)
-//       .json({ message: "Failed to update profile", error: error.message });
-//   }
-// };
 export const updateProfile = async (req, res) => {
   try {
+    // Extract incoming fields from form-data body
     const {
       email,
       firstName,
       lastName,
       phoneNumber,
       description,
+      languages,
+      sessionPrice,
+      focusAreas,
       expertise,
       experience,
       workingHours,
@@ -358,6 +279,48 @@ export const updateProfile = async (req, res) => {
       profileData.workingDays = workingDays;
     }
 
+    //Accept only valid languages
+    if (typeof languages !== "undefined") {
+      if (Array.isArray(languages)) {
+        profileData.languages = languages;
+      } else if (typeof languages === "string") {
+        // allow comma-separated or single string
+        profileData.languages = languages.includes(",")
+          ? languages.split(",").map((s) => s.trim())
+          : [languages.trim()];
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "languages must be an array or comma-separated string",
+        });
+      }
+    }
+
+    // Session Price
+    if (typeof sessionPrice !== "undefined") {
+      const parsed = Number(sessionPrice);
+      profileData.sessionPrice = Number.isFinite(parsed)
+        ? parsed
+        : sessionPrice; // fallback to string if not numeric
+    }
+
+    // ------------------ NEW: focusAreas -------------------------
+    if (typeof focusAreas !== "undefined") {
+      if (Array.isArray(focusAreas)) {
+        profileData.focusAreas = focusAreas;
+      } else if (typeof focusAreas === "string") {
+        // support comma-separated values or single string
+        profileData.focusAreas = focusAreas.includes(",")
+          ? focusAreas.split(",").map((s) => s.trim())
+          : [focusAreas.trim()];
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "focusAreas must be an array or comma-separated string",
+        });
+      }
+    }
+
     // ------------------ IMAGE UPLOAD LOGIC ---------------------
     if (req.file) {
       const bucket = storage.bucket();
@@ -395,6 +358,67 @@ export const updateProfile = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to update profile",
+      error: error.message,
+    });
+  }
+};
+
+// fetch counsellors---------------- for FRONTEND ---------------
+export const getAllCounsellors = async (req, res) => {
+  try {
+    const snapshot = await adminDb
+      .collection("counsellors")
+      .where("profileCompleted", "==", true)
+      .get();
+
+    const counsellors = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        imageUrl: data.profileData?.imageUrl || "",
+        firstName: data.profileData?.firstName || "",
+        lastName: data.profileData?.lastName || "",
+        experience: data.profileData?.experience || "",
+        expertise: data.profileData?.expertise || "",
+        languages: data.profileData?.languages || [],
+        sessionPrice: data.profileData?.sessionPrice || "",
+        focusAreas: data.profileData?.focusAreas || [],
+        description: data.profileData?.description || "",
+        phoneNumber: data.profileData?.phoneNumber || "",
+        email: data.email,
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      counsellors,
+    });
+  } catch (error) {
+    console.error("getAllCounsellors error:", err);
+    return res.status(500).json({ message: "Failed to fetch counsellors" });
+  }
+};
+
+//filter controller
+export const filterCounsellors = async (req, res) => {
+  try {
+    const { languages, expertise } = req.qurey;
+
+    const filters = {
+      languages: languages ? languages.split(",") : [],
+      expertise: expertise ? expertise.split(",") : [],
+    };
+
+    const data = await filterCounsellorsService(filters);
+
+    return res.status(200).json({
+      success: true,
+      count: data.length,
+      counsellors: data,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to filter counsellors",
       error: error.message,
     });
   }
