@@ -383,7 +383,6 @@ export const getAllCounsellors = async (req, res) => {
   }
 };
 
-
 //filter controller
 export const filterCounsellors = async (req, res) => {
   try {
