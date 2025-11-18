@@ -213,6 +213,13 @@ export const verifyOtp = async (req, res) => {
   }
 };
 
+//helperfucntion
+const toArray = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  return [value]; // convert single string → array
+};
+
 export const updateProfile = async (req, res) => {
   try {
     // Extract incoming fields from form-data body
@@ -265,7 +272,10 @@ export const updateProfile = async (req, res) => {
     if (lastName) profileData.lastName = lastName;
     if (phoneNumber) profileData.phoneNumber = phoneNumber;
     if (description) profileData.description = description;
-    if (expertise) profileData.expertise = expertise;
+    if (typeof expertise !== "undefined") {
+      profileData.expertise = toArray(expertise);
+    }
+
     if (experience) profileData.experience = experience;
     if (workingHours) profileData.workingHours = workingHours;
 
@@ -279,21 +289,8 @@ export const updateProfile = async (req, res) => {
       profileData.workingDays = workingDays;
     }
 
-    //Accept only valid languages
     if (typeof languages !== "undefined") {
-      if (Array.isArray(languages)) {
-        profileData.languages = languages;
-      } else if (typeof languages === "string") {
-        // allow comma-separated or single string
-        profileData.languages = languages.includes(",")
-          ? languages.split(",").map((s) => s.trim())
-          : [languages.trim()];
-      } else {
-        return res.status(400).json({
-          success: false,
-          message: "languages must be an array or comma-separated string",
-        });
-      }
+      profileData.languages = toArray(languages).map((s) => s.trim());
     }
 
     // Session Price
@@ -306,19 +303,7 @@ export const updateProfile = async (req, res) => {
 
     // ------------------ NEW: focusAreas -------------------------
     if (typeof focusAreas !== "undefined") {
-      if (Array.isArray(focusAreas)) {
-        profileData.focusAreas = focusAreas;
-      } else if (typeof focusAreas === "string") {
-        // support comma-separated values or single string
-        profileData.focusAreas = focusAreas.includes(",")
-          ? focusAreas.split(",").map((s) => s.trim())
-          : [focusAreas.trim()];
-      } else {
-        return res.status(400).json({
-          success: false,
-          message: "focusAreas must be an array or comma-separated string",
-        });
-      }
+      profileData.focusAreas = toArray(focusAreas).map((s) => s.trim());
     }
 
     // ------------------ IMAGE UPLOAD LOGIC ---------------------
@@ -398,14 +383,36 @@ export const getAllCounsellors = async (req, res) => {
   }
 };
 
+
 //filter controller
 export const filterCounsellors = async (req, res) => {
   try {
-    const { languages, expertise } = req.qurey;
+    // Normalizes languages/expertise into clean arrays
+    const normalizeQueryArray = (value) => {
+      if (!value) return [];
+      
+      // If Express parsed repeated query params -> array
+      if (Array.isArray(value)) {
+        return value
+          .flatMap((v) => v.split(",")) // split comma groups
+          .map((s) => s.trim())         // remove spaces
+          .filter((s) => s.length > 0); // remove empty
+      }
+
+      // If single string: split by comma
+      if (typeof value === "string") {
+        return value
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+      }
+
+      return [];
+    };
 
     const filters = {
-      languages: languages ? languages.split(",") : [],
-      expertise: expertise ? expertise.split(",") : [],
+      languages: normalizeQueryArray(req.query.languages),
+      expertise: normalizeQueryArray(req.query.expertise),
     };
 
     const data = await filterCounsellorsService(filters);
