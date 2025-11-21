@@ -1,0 +1,35 @@
+steps:
+  # Step 1 — Build Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'build',
+        '-t',
+        'asia-south1-docker.pkg.dev/mindsoul-backend/mindsoul-repo/mindsoul-backend:$COMMIT_SHA',
+        '.'
+      ]
+
+  # Step 2 — Push image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      [
+        'push',
+        'asia-south1-docker.pkg.dev/mindsoul-backend/mindsoul-repo/mindsoul-backend:$COMMIT_SHA'
+      ]
+
+  # Step 3 — Deploy to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args:
+      [
+        'run',
+        'deploy',
+        'mindsoul-backend',
+        '--image=asia-south1-docker.pkg.dev/mindsoul-backend/mindsoul-repo/mindsoul-backend:$COMMIT_SHA',
+        '--region=asia-south1',
+        '--platform=managed',
+        '--allow-unauthenticated',
+        '--port=8080'
+      ]
+
+images:
+  - 'asia-south1-docker.pkg.dev/mindsoul-backend/mindsoul-repo/mindsoul-backend:$COMMIT_SHA'
