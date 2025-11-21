@@ -12,7 +12,7 @@ router.post("/send-otp", sendOtp);
 
 router.post("/verify-otp", verifyOtp);
 
-router.post("/update-profile", authenticate, upload.single("profileImage"),  updateProfile);
+router.post("/update-profile", authenticate, upload.single("profileImage"),  updateProfile);  
 
 //get counsellors
 router.get("/list", getAllCounsellors);
