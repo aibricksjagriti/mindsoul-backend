@@ -236,6 +236,8 @@ export const updateProfile = async (req, res) => {
       experience,
       workingHours,
       workingDays,
+
+      slotDuration,
     } = req.body;
 
     if (!email) {
@@ -277,8 +279,38 @@ export const updateProfile = async (req, res) => {
     }
 
     if (experience) profileData.experience = experience;
-    if (workingHours) profileData.workingHours = workingHours;
 
+
+     // --- NEW FOR TIMESLOTS: Validate + assign workingHours ---
+      if (workingHours) {
+      try {
+        // change #1 — always treat workingHours as a JSON string
+        const parsedWH = JSON.parse(workingHours);
+        // change #2 — assign parsed object to Firestore
+        profileData.workingHours = parsedWH;
+      } catch (e) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "workingHours must be valid JSON. Example: { \"morning\": {\"start\":\"09:00\",\"end\":\"12:00\"} }",
+        });
+      }
+    }
+
+    // --- NEW FOR TIMESLOTS: slotDuration (integer minutes) ---
+    if (typeof slotDuration !== "undefined") {
+      const parsed = Number(slotDuration);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "slotDuration must be a positive number (minutes)",
+        });
+      }
+      profileData.slotDuration = parsed;
+    }
+
+
+    // WORKING DAYS
     if (workingDays) {
       if (!Array.isArray(workingDays)) {
         return res.status(400).json({
@@ -289,6 +321,7 @@ export const updateProfile = async (req, res) => {
       profileData.workingDays = workingDays;
     }
 
+    //LANGUAGES
     if (typeof languages !== "undefined") {
       profileData.languages = toArray(languages).map((s) => s.trim());
     }
