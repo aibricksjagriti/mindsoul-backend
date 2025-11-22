@@ -1,11 +1,12 @@
 import express from "express";
 import cors from "cors";
-import authRoutes from "../src/routes/auth.routes.js"
-import counsellorRoutes from "../src/routes/counsellor.routes.js"
-import appointmentRoutes from "../src/routes/appointment.routes.js"
-// import userRoutes from "../src/routes/user.routes.js"
-import timeslotRoutes from "../src/routes/timeslot.routes.js";
 import cookieParser from "cookie-parser";
+import authRoutes from "./routes/auth.routes.js";
+import counsellorRoutes from "./routes/counsellor.routes.js";
+import appointmentRoutes from "./routes/appointment.routes.js";
+import timeslotRoutes from "./routes/timeslot.routes.js";
+
+
 
 
 //app config
@@ -22,7 +23,6 @@ app.use(cookieParser());
 app.use("/api/auth", authRoutes);
 app.use("/api/counsellor", counsellorRoutes);
 app.use("/api/appointment", appointmentRoutes);
-// app.use("/api/users", userRoutes);
 app.use("/api/timeslots", timeslotRoutes);
 
 
