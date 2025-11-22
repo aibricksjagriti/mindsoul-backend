@@ -36,4 +36,5 @@ const db = admin.firestore();
 const auth = admin.auth();
 const storage = admin.storage();
 
-export { db, auth, storage };
+const adminDb = db;
+export { db, auth, storage, adminDb };
