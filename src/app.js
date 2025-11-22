@@ -26,4 +26,9 @@ app.use("/api/users", userRoutes);
 app.use("/api/timeslots", timeslotRoutes);
 
 
+//entry route for deployed backend
+app.get("/", (req, res)=> {
+  res.send("Hello from Mindsoul Backend");
+})
+
 export default app;
