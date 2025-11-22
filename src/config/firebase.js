@@ -6,35 +6,34 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-//Resolve service account key
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const serviceAccountPath = path.resolve(
-  __dirname,
-  "../../firebaseAuthKey.json"
-);
 
-// Read and parse JSON (Admin SDK key)
-const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, "utf8"));
+// 1️⃣ If running locally AND firebaseAuthKey.json exists → load from file
+const localKeyPath = path.resolve(__dirname, "../../firebaseAuthKey.json");
+let serviceAccount = null;
 
-/* Initialize Firebase Admin SDK (server side)    Used for Firestore + Auth + any secure operations like OTP storage */
+if (fs.existsSync(localKeyPath)) {
+  serviceAccount = JSON.parse(fs.readFileSync(localKeyPath, "utf8"));
+  console.log("Loaded Firebase key from local file");
+}
+
+// 2️⃣ If running on Cloud Run → load from environment variable
+if (!serviceAccount && process.env.FIREBASE_SERVICE_ACCOUNT) {
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  console.log("Loaded Firebase key from environment variable");
+}
+
+// 3️⃣ Initialize Admin SDK
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-
-
-     // REQUIRED FOR STORAGE 
-    storageBucket: "mindsoul-backend.firebasestorage.app"
+    storageBucket: "mindsoul-backend.firebasestorage.app",
   });
 }
 
-// Export both Firestore and Auth instances
 const db = admin.firestore();
 const auth = admin.auth();
-const storage = admin.storage(); //for image storage
+const storage = admin.storage();
 
-
-//Alias admindb (for clarity in controllers)
-const adminDb = db;
-
-export { db, auth, adminDb, storage };
+export { db, auth, storage };
