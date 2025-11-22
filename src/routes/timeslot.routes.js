@@ -20,6 +20,6 @@ router.post("/counsellor/:id/slots/generate",authenticate, generateSlotsForCouns
 
 
 //DELETE all slots for a date
-router.delete("/cousellor/:id/slots", authenticate,  deleteSlots);
+router.delete("/counsellor/:id/slots", authenticate,  deleteSlots);
 
 export default router;
