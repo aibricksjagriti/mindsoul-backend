@@ -191,3 +191,47 @@ export const deleteSlots = async (req, res) => {
     });
   }
 };
+
+
+// ----------------------------------------------
+// GET ALL BOOKED SLOTS FOR A COUNSELLOR + DATE
+// ----------------------------------------------
+export const getBookedSlots = async (req, res) => {
+  try {
+    const counsellorId = req.params.id?.trim().toLowerCase();
+    const date = req.query.date;
+
+    if (!counsellorId || !date) {
+      return res.status(400).json({
+        success: false,
+        message: "counsellorId and date are required"
+      });
+    }
+
+    const snap = await adminDb
+      .collection("timeSlots")
+      .where("counsellorId", "==", counsellorId)
+      .where("date", "==", date)
+      .where("isBooked", "==", true)
+      .get();
+
+    const booked = snap.docs.map(doc => doc.data());
+
+    return res.json({
+      success: true,
+      date,
+      bookedSlots: booked.map(s => ({
+        startTime: s.startTime,
+        endTime: s.endTime,
+        period: s.period
+      }))
+    });
+  } catch (err) {
+    console.error("getBookedSlots error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch booked slots",
+      error: err.message
+    });
+  }
+};
