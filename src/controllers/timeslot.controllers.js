@@ -126,6 +126,7 @@ export const deleteSlots = async (req, res) => {
   try {
     const counsellorId = req.params.id?.trim().toLowerCase();
     const date = req.query.date;
+    const period = req.query.period; // NEW
 
     if (!counsellorId || !date) {
       return res.status(400).json({
@@ -134,6 +135,47 @@ export const deleteSlots = async (req, res) => {
       });
     }
 
+    // ---------------------------------------------------------
+    // NEW: DELETE specific period (morning/afternoon/evening)
+    // ---------------------------------------------------------
+    if (period) {
+      const valid = ["morning", "afternoon", "evening"];
+
+      if (!valid.includes(period)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid period. Use: morning, afternoon, evening",
+        });
+      }
+
+      const slotsQuery = await adminDb
+        .collection("timeSlots")
+        .where("counsellorId", "==", counsellorId)
+        .where("date", "==", date)
+        .where("period", "==", period)
+        .get();
+
+      if (slotsQuery.empty) {
+        return res.status(200).json({
+          success: true,
+          message: `No slots found for ${period} on ${date}`,
+        });
+      }
+
+      const batch = adminDb.batch();
+      slotsQuery.forEach((doc) => batch.delete(doc.ref));
+      await batch.commit();
+
+      return res.status(200).json({
+        success: true,
+        message: `All ${period} slots deleted for ${date}`,
+        deletedCount: slotsQuery.size,
+      });
+    }
+
+    // ---------------------------------------------------------
+    // ORIGINAL: DELETE ALL slots for a date
+    // ---------------------------------------------------------
     await deleteSlotsForDate(counsellorId, date);
 
     return res.status(200).json({
