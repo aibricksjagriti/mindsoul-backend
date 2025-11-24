@@ -7,7 +7,7 @@ import {
 } from "../timeslots/slotService.timeslots.js";
 import { groupSlotsByPeriod } from "../timeslots/slotUtils.timeslots.js";
 import admin from "firebase-admin";
-
+import { adminDb } from "../config/firebase.js";
 const db = admin.firestore();
 
 /**
