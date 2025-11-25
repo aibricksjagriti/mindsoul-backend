@@ -1,5 +1,7 @@
 import express from "express";
 import cookieParser from "cookie-parser";
+import cors from "cors";
+
 import authRoutes from "./routes/auth.routes.js";
 import counsellorRoutes from "./routes/counsellor.routes.js";
 import appointmentRoutes from "./routes/appointment.routes.js";
@@ -10,6 +12,20 @@ import timeslotRoutes from "./routes/timeslot.routes.js";
 
 //app config
 const app = express();
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://mindsoul-frontend.netlify.app"
+];
+
+// GLOBAL CORS (must be before routes)
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+  })
+);
+
 
 
 //middlewares
