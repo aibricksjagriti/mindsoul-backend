@@ -11,18 +11,90 @@ if (!JWT_SECRET) {
 }
 
 //Signup code - firebase DB
+// export const signup = async (req, res) => {
+//   try {
+//     const { name, email, password } = req.body;
+
+//     //Validate input
+//     if (!name || !email || !password) {
+//       return res
+//         .status(400)
+//         .json({ success: false, message: "All fields are required." });
+//     }
+
+//     //Check if user already exists
+//     const usersRef = db.collection("users");
+//     const existingUser = await usersRef.where("email", "==", email).get();
+//     if (!existingUser.empty) {
+//       return res
+//         .status(409)
+//         .json({ success: false, message: "User already exists." });
+//     }
+
+//     //Hash password
+//     const hashedPassword = await argon2.hash(password);
+
+//     //create user document in firestore
+//     const userRef = usersRef.doc(); //firestore auto-generates unique ID
+//     await userRef.set({
+//       name,
+//       email,
+//       password: hashedPassword,
+//       authProvider: "email",
+//       createdAt: new Date(),
+//     });
+
+//     //Generate JWT
+//     const token = jwt.sign(
+//       { id: userRef.id, email, name, role: "user" },
+//       JWT_SECRET || "fallback_secret",
+//       {
+//         expiresIn: "2d",
+//       }
+//     );
+
+//     // set a cookie with the token
+//     res.cookie("mindsoul_token", token, {
+//       httpOnly: true,
+//       secure: true, // true in production / https
+//       sameSite: "None",
+//       maxAge: 2 * 24 * 60 * 60 * 1000, // 2 days
+//     });
+
+//     res.status(201).json({
+//       success: true,
+//       message: "Signup successful.",
+//       data: {
+//         token,
+//         user: {
+//           id: userRef.id,
+//           name,
+//           email,
+//           authProvider: "email",
+//         },
+//       },
+//     });
+//   } catch (error) {
+//     console.error("Signup Error:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Internal server error.",
+//       error: process.env.NODE_ENV === "development" ? error.message : undefined,
+//     });
+//   }
+// };
 export const signup = async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
-    //Validate input
+    // Validate input
     if (!name || !email || !password) {
       return res
         .status(400)
         .json({ success: false, message: "All fields are required." });
     }
 
-    //Check if user already exists
+    // Check if user already exists
     const usersRef = db.collection("users");
     const existingUser = await usersRef.where("email", "==", email).get();
     if (!existingUser.empty) {
@@ -31,20 +103,23 @@ export const signup = async (req, res) => {
         .json({ success: false, message: "User already exists." });
     }
 
-    //Hash password
+    // Hash password
     const hashedPassword = await argon2.hash(password);
 
-    //create user document in firestore
-    const userRef = usersRef.doc(); //firestore auto-generates unique ID
+    // Create user document
+    const userRef = usersRef.doc();
+
     await userRef.set({
       name,
       email,
       password: hashedPassword,
       authProvider: "email",
+      isUser: true,                 // <--- ADDED
+      profileCompleted: false,      // <--- ADDED
       createdAt: new Date(),
     });
 
-    //Generate JWT
+    // Generate JWT
     const token = jwt.sign(
       { id: userRef.id, email, name, role: "user" },
       JWT_SECRET || "fallback_secret",
@@ -53,14 +128,15 @@ export const signup = async (req, res) => {
       }
     );
 
-    // set a cookie with the token
+    // Set cookie
     res.cookie("mindsoul_token", token, {
       httpOnly: true,
-      secure: true, // true in production / https
+      secure: true,
       sameSite: "None",
-      maxAge: 2 * 24 * 60 * 60 * 1000, // 2 days
+      maxAge: 2 * 24 * 60 * 60 * 1000,
     });
 
+    // Response
     res.status(201).json({
       success: true,
       message: "Signup successful.",
@@ -71,6 +147,8 @@ export const signup = async (req, res) => {
           name,
           email,
           authProvider: "email",
+          isUser: true,             // <--- INCLUDED IN RESPONSE
+          profileCompleted: false,  // <--- INCLUDED IN RESPONSE
         },
       },
     });
@@ -83,6 +161,7 @@ export const signup = async (req, res) => {
     });
   }
 };
+
 
 //Login - firebase db
 export const login = async (req, res) => {
@@ -132,12 +211,12 @@ export const login = async (req, res) => {
       { expiresIn: "2h" }
     );
 
-    // New : set cookie for jwt
+    // Set cookie for JWT
     res.cookie("mindsoul_token", token, {
       httpOnly: true,
-      secure: true, // must be true in production (HTTPS)
+      secure: true,
       sameSite: "None",
-      maxAge: 2 * 24 * 60 * 60 * 1000, // 2 days
+      maxAge: 2 * 24 * 60 * 60 * 1000,
     });
 
     return res.status(200).json({
@@ -151,6 +230,10 @@ export const login = async (req, res) => {
           email: userData.email,
           authProvider: userData.authProvider || "email",
           role: userData.role || "user",
+
+          // --- ADDED ---
+          isUser: userData.isUser ?? true,                 // new
+          profileCompleted: userData.profileCompleted ?? false, // new
         },
       },
     });
@@ -163,6 +246,7 @@ export const login = async (req, res) => {
     });
   }
 };
+
 
 //google signin controller
 export const googleSignIn = async (req, res) => {
