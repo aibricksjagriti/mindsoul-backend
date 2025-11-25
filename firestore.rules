@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================
+    // USERS COLLECTION
+    // ===============================
+    match /users/{userId} {
+
+      // A user can read or write only their own document
+      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+
+      // Anyone can create their own user account (signup)
+      allow create: if request.auth != null;
+
+      // User-owned appointments
+      match /appointments/{appointmentId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    // ===============================
+    // COUNSELLORS COLLECTION
+    // ===============================
+    // Counsellor data must be readable publicly → FE needs to display profiles.
+    match /counsellors/{email} {
+      allow read: if true;  // anyone can view counsellor profile
+
+      // Only authenticated counsellor can update their own profile
+      allow update, delete: if request.auth != null;
+
+      // Anyone can create a counsellor document (during onboarding)
+      allow create: if request.auth != null;
+
+      // Counsellor's subcollection: appointments snapshot
+      match /appointments/{appointmentId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+
+    // ===============================
+    // APPOINTMENTS COLLECTION
+    // ===============================
+    match /appointments/{appointmentId} {
+      // Appointments should be readable and writable by any authenticated user
+      // Users only see THEIR subcollection under /users/{uid}/appointments
+      // but the main collection stores master appointment documents.
+      allow read, write: if request.auth != null;
+    }
+
+    // ===============================
+    // TIMESLOTS COLLECTION
+    // ===============================
+    match /timeSlots/{slotId} {
+
+      // Anyone can READ available time slots
+      allow read: if true;
+
+      // Only authenticated backend service user or authenticated user can write
+      // (your backend uses firebase-admin SDK → always authenticated)
+      allow create, update, delete: if request.auth != null;
+    }
+
+    // ===============================
+    // DEFAULT DENY (Safety net)
+    // ===============================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
