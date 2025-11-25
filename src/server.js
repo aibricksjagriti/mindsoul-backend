@@ -8,14 +8,18 @@ dotenv.config();
 
 const PORT = process.env.PORT || 8080;
 
-// Proper CORS for Cloud Run
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://mindsoul-frontend.netlify.app" // add your prod domain later
+];
+
+// CORS
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: allowedOrigins,
     credentials: true,
   })
 );
-
 
 //connect to firestore
 async function testFirestore() {
