@@ -6,6 +6,21 @@ dotenv.config();
 
 const PORT = process.env.PORT || 8080;
 
+// Proper CORS for Cloud Run
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  })
+);
+
+// Preflight for all routes
+app.options("*", cors({
+  origin: "http://localhost:5173",
+  credentials: true,
+}));
+
+
 //connect to firestore
 async function testFirestore() {
   await db
