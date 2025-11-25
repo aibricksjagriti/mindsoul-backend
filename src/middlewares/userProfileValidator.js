@@ -37,18 +37,27 @@ export const validateUserProfile = (req, res, next) => {
     });
   }
 
-  // Optional fields (if present, must be strings)
-  if (medications && typeof medications !== "string") {
+  // medications: must be string or array
+  if (
+    medications &&
+    !Array.isArray(medications) &&
+    typeof medications !== "string"
+  ) {
     return res.status(400).json({
       success: false,
-      message: "medications should be a string",
+      message: "medications must be a string or an array",
     });
   }
 
-  if (medicalHistory && typeof medicalHistory !== "string") {
+  // medicalHistory: must be string or array
+  if (
+    medicalHistory &&
+    !Array.isArray(medicalHistory) &&
+    typeof medicalHistory !== "string"
+  ) {
     return res.status(400).json({
       success: false,
-      message: "medicalHistory should be a string",
+      message: "medicalHistory must be a string or an array",
     });
   }
 
