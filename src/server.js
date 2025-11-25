@@ -1,6 +1,8 @@
 import dotenv from "dotenv";
 import app from "./app.js";
 import { db } from "./config/firebase.js";
+import cors from "cors";
+
 
 dotenv.config();
 
@@ -13,12 +15,6 @@ app.use(
     credentials: true,
   })
 );
-
-// Preflight for all routes
-app.options("*", cors({
-  origin: "http://localhost:5173",
-  credentials: true,
-}));
 
 
 //connect to firestore
