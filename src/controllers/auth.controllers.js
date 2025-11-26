@@ -11,78 +11,6 @@ if (!JWT_SECRET) {
 }
 
 //Signup code - firebase DB
-// export const signup = async (req, res) => {
-//   try {
-//     const { name, email, password } = req.body;
-
-//     //Validate input
-//     if (!name || !email || !password) {
-//       return res
-//         .status(400)
-//         .json({ success: false, message: "All fields are required." });
-//     }
-
-//     //Check if user already exists
-//     const usersRef = db.collection("users");
-//     const existingUser = await usersRef.where("email", "==", email).get();
-//     if (!existingUser.empty) {
-//       return res
-//         .status(409)
-//         .json({ success: false, message: "User already exists." });
-//     }
-
-//     //Hash password
-//     const hashedPassword = await argon2.hash(password);
-
-//     //create user document in firestore
-//     const userRef = usersRef.doc(); //firestore auto-generates unique ID
-//     await userRef.set({
-//       name,
-//       email,
-//       password: hashedPassword,
-//       authProvider: "email",
-//       createdAt: new Date(),
-//     });
-
-//     //Generate JWT
-//     const token = jwt.sign(
-//       { id: userRef.id, email, name, role: "user" },
-//       JWT_SECRET || "fallback_secret",
-//       {
-//         expiresIn: "2d",
-//       }
-//     );
-
-//     // set a cookie with the token
-//     res.cookie("mindsoul_token", token, {
-//       httpOnly: true,
-//       secure: true, // true in production / https
-//       sameSite: "None",
-//       maxAge: 2 * 24 * 60 * 60 * 1000, // 2 days
-//     });
-
-//     res.status(201).json({
-//       success: true,
-//       message: "Signup successful.",
-//       data: {
-//         token,
-//         user: {
-//           id: userRef.id,
-//           name,
-//           email,
-//           authProvider: "email",
-//         },
-//       },
-//     });
-//   } catch (error) {
-//     console.error("Signup Error:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Internal server error.",
-//       error: process.env.NODE_ENV === "development" ? error.message : undefined,
-//     });
-//   }
-// };
 export const signup = async (req, res) => {
   try {
     const { name, email, password } = req.body;
@@ -124,7 +52,7 @@ export const signup = async (req, res) => {
       { id: userRef.id, email, name, role: "user" },
       JWT_SECRET || "fallback_secret",
       {
-        expiresIn: "2d",
+        expiresIn: "7d",
       }
     );
 
@@ -208,7 +136,7 @@ export const login = async (req, res) => {
         role: userData.role || "user",
       },
       JWT_SECRET || "fallback_secret",
-      { expiresIn: "2h" }
+      { expiresIn: "7d" }
     );
 
     // Set cookie for JWT
@@ -288,7 +216,7 @@ export const googleSignIn = async (req, res) => {
       { id: uid, email, name: name || "", role: "user" },
       JWT_SECRET,
       {
-        expiresIn: "2d",
+        expiresIn: "7d",
       }
     );
 
@@ -370,7 +298,7 @@ export const openSession = async (req, res) => {
     const token = jwt.sign(
       { uid, email, name },
       process.env.JWT_SECRET || "fallback_secret",
-      { expiresIn: "1h" }
+      { expiresIn: "7d" }
     );
 
     return res.status(200).json({
