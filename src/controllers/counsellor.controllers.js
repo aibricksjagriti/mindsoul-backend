@@ -181,7 +181,7 @@ export const verifyOtp = async (req, res) => {
         role: "counsellor",
       },
       process.env.JWT_SECRET || "fallback_secret",
-      { expiresIn: "2d" }
+      { expiresIn: "7d" }
     );
 
     // ---------------------- NEW: Set Cookie -------------------------
@@ -189,7 +189,7 @@ export const verifyOtp = async (req, res) => {
       httpOnly: true,
       secure: true, // true in production HTTPS
       sameSite: "None",
-      maxAge: 2 * 24 * 60 * 60 * 1000, // 2 days
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 2 days
     });
 
     // Mark OTP verified & cleanup
