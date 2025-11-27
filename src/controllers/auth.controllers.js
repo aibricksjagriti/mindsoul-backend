@@ -45,6 +45,9 @@ export const signup = async (req, res) => {
       isUser: true,                 // <--- ADDED
       profileCompleted: false,      // <--- ADDED
       createdAt: new Date(),
+
+      //new store user role
+      role: "user",
     });
 
     // Generate JWT
@@ -77,6 +80,7 @@ export const signup = async (req, res) => {
           authProvider: "email",
           isUser: true,             // <--- INCLUDED IN RESPONSE
           profileCompleted: false,  // <--- INCLUDED IN RESPONSE
+          role: "user",
         },
       },
     });

@@ -162,6 +162,9 @@ export const verifyOtp = async (req, res) => {
         profileCompleted: false,
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+
+        //new add role to counsellor
+        role: "counsellor",
       });
       isNewCounsellor = true;
     } else {
@@ -170,6 +173,9 @@ export const verifyOtp = async (req, res) => {
         isCounsellor: true,
         isVerified: true,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+
+        //new ensure role stays consistent
+        role: "counsellor",
       });
     }
 
@@ -204,6 +210,8 @@ export const verifyOtp = async (req, res) => {
       profileCompleted: isNewCounsellor
         ? false
         : counsellorSnap.data().profileCompleted || false,
+
+        role: "counsellor",
     });
   } catch (error) {
     console.error("Error verifying OTP:", error);
