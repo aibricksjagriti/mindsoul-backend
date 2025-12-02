@@ -166,10 +166,18 @@ export const getUserAppointments = async (req, res) => {
     const appointments = snapshot.docs.map((doc) => {
       const data = doc.data();
 
+      const counsellorName =
+        data.counsellorName || // in case you stored this manually someday
+        (data.counsellorProfileSnapshot
+          ? `${data.counsellorProfileSnapshot.firstName || ""} ${
+              data.counsellorProfileSnapshot.lastName || ""
+            }`.trim()
+          : null); // ⭐ NEW
+
       return {
         id: doc.id,
         counsellorId: data.counsellorId || null,
-        counsellorName: data.counsellorName || null,
+        counsellorName,
         date: data.date || null,
         timeSlot: data.timeSlot || null,
         status: data.status || null,
