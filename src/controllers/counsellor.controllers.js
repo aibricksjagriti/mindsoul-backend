@@ -145,44 +145,52 @@ export const verifyOtp = async (req, res) => {
       return res.status(400).json({ message: "Invalid OTP" });
     }
 
-    // OTP valid: check if counsellor already exists
-    const counsellorRef = adminDb
+    //Fetch counsellor by email (NOT docId = email)
+    const existingQuery = await adminDb
       .collection("counsellors")
-      .doc(normalizedEmail);
-    const counsellorSnap = await counsellorRef.get();
+      .where("email", "==", normalizedEmail) // NEW: search by email field
+      .limit(1)
+      .get();
 
+    let counsellorRef;
     let isNewCounsellor = false;
 
-    if (!counsellorSnap.exists) {
-      // First-time verification → create new counsellor record
+    if (existingQuery.empty) {
+    
+      // CHANGE #2: Create counsellor with auto-generated document ID
+      counsellorRef = adminDb.collection("counsellors").doc(); // NEW auto-generated ID
+
       await counsellorRef.set({
+        counsellorId: counsellorRef.id, // NEW field stored
         email: normalizedEmail,
         isCounsellor: true,
         isVerified: true,
         profileCompleted: false,
+        role: "counsellor",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-
-        //new add role to counsellor
-        role: "counsellor",
       });
+
       isNewCounsellor = true;
+
     } else {
-      // Existing counsellor → just mark verified
+      // -------------------------------------------------------------
+      // CHANGE #3: Get existing counsellor docRef using query result
+      // -------------------------------------------------------------
+      counsellorRef = existingQuery.docs[0].ref; // NEW using existing docRef
+
       await counsellorRef.update({
         isCounsellor: true,
         isVerified: true,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-
-        //new ensure role stays consistent
         role: "counsellor",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     }
 
-    // ---------------------- NEW: Generate JWT ----------------------
+    // ---------------------- JWT (no change except id field) ----------------------
     const token = jwt.sign(
       {
-        id: normalizedEmail,
+        id: counsellorRef.id, // CHANGED: counsellorId instead of email
         email: normalizedEmail,
         role: "counsellor",
       },
@@ -190,12 +198,12 @@ export const verifyOtp = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    // ---------------------- NEW: Set Cookie -------------------------
+    // Set cookie
     res.cookie("mindsoul_token", token, {
       httpOnly: true,
-      secure: true, // true in production HTTPS
+      secure: true,
       sameSite: "None",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 2 days
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     // Mark OTP verified & cleanup
@@ -207,12 +215,13 @@ export const verifyOtp = async (req, res) => {
       success: true,
       isCounsellor: true,
       isVerified: true,
+      counsellorId: counsellorRef.id, // NEW: return counsellorId for frontend
       profileCompleted: isNewCounsellor
         ? false
-        : counsellorSnap.data().profileCompleted || false,
-
-        role: "counsellor",
+        : existingQuery.docs[0].data().profileCompleted || false,
+      role: "counsellor",
     });
+
   } catch (error) {
     console.error("Error verifying OTP:", error);
     return res
@@ -220,6 +229,7 @@ export const verifyOtp = async (req, res) => {
       .json({ message: "OTP verification failed", error: error.message });
   }
 };
+
 
 //helperfucntion
 const toArray = (value) => {
@@ -233,6 +243,7 @@ export const updateProfile = async (req, res) => {
     // Extract incoming fields from form-data body
     const {
       email,
+      counsellorId,
       firstName,
       lastName,
       phoneNumber,
@@ -248,16 +259,18 @@ export const updateProfile = async (req, res) => {
       slotDuration,
     } = req.body;
 
-    if (!email) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Email is required" });
+      if (!counsellorId) {
+      return res.status(400).json({
+        success: false,
+        message: "counsellorId is required", // ⭐ NEW
+      });
     }
 
+
     const normalizedEmail = email.trim().toLowerCase();
-    const counsellorRef = adminDb
+        const counsellorRef = adminDb
       .collection("counsellors")
-      .doc(normalizedEmail);
+      .doc(counsellorId); // ⭐ NEW changed from doc(normalizedEmail)
     const counsellorSnap = await counsellorRef.get();
 
     if (!counsellorSnap.exists) {
@@ -274,6 +287,7 @@ export const updateProfile = async (req, res) => {
         message: "Counsellor not verified. Complete OTP verification first.",
       });
     }
+
 
     // ------------------ BUILD PROFILE DATA ---------------------
     const profileData = {};
@@ -400,6 +414,7 @@ export const getAllCounsellors = async (req, res) => {
     const counsellors = snapshot.docs.map((doc) => {
       const data = doc.data();
       return {
+        counsellorId: doc.id,
         imageUrl: data.profileData?.imageUrl || "",
         firstName: data.profileData?.firstName || "",
         lastName: data.profileData?.lastName || "",
@@ -411,6 +426,9 @@ export const getAllCounsellors = async (req, res) => {
         description: data.profileData?.description || "",
         phoneNumber: data.profileData?.phoneNumber || "",
         email: data.email,
+        workingDays: data.profileData?.workingDays || [],
+        workingHours: data.profileData?.workingHours || {},
+
       };
     });
 
@@ -421,6 +439,64 @@ export const getAllCounsellors = async (req, res) => {
   } catch (error) {
     console.error("getAllCounsellors error:", err);
     return res.status(500).json({ message: "Failed to fetch counsellors" });
+  }
+};
+
+// fetch counsellor by Id -------------for FRONTEND -------------
+export const getAllCounsellorsById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if(!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Counsellor email is required"
+      });
+    }
+
+    const docSnap = await adminDb
+      .collection("counsellors")
+      .doc(id) 
+      .get();
+
+    if (!docSnap.exists) {
+      return res.status(404).json({
+        success: false,
+        message: "Counsellor not found",
+      });
+    }
+
+    const data = docSnap.data();
+
+
+
+    const counsellor = {
+      counsellorId: id,
+      imageUrl: data.profileData?.imageUrl || "",
+      firstName: data.profileData?.firstName || "",
+      lastName: data.profileData?.lastName || "",
+      experience: data.profileData?.experience || "",
+      expertise: data.profileData?.expertise || [],
+      languages: data.profileData?.languages || [],
+      sessionPrice: data.profileData?.sessionPrice || "",
+      focusAreas: data.profileData?.focusAreas || [],
+      description: data.profileData?.description || "",
+      phoneNumber: data.profileData?.phoneNumber || "",
+      email: data.email || email,
+      workingDays: data.profileData?.workingDays || [],
+      workingHours: data.profileData?.workingHours || {},
+    };
+
+    return res.status(200).json({
+      success: true,
+      counsellor,
+    });
+  } catch (error) {
+    console.error("getCounsellorById error: ", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch counsellor",
+    });
   }
 };
 
