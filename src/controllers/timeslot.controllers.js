@@ -18,7 +18,7 @@ const db = admin.firestore();
  */
 export const getAvailableSlots = async (req, res) => {
   try {
-    const counsellorId = req.params.id?.trim().toLowerCase();
+    const counsellorId = req.params.id;
     const date = req.query?.date;
 
     if (!counsellorId || !date) {
@@ -58,7 +58,7 @@ export const getAvailableSlots = async (req, res) => {
  */
 export const generateSlotsForCounsellor = async (req, res) => {
   try {
-    const counsellorId = req.params.id?.trim().toLowerCase();
+    const counsellorId = req.params.id;
     const { date } = req.body;
 
     if (!counsellorId || !date) {
@@ -124,7 +124,7 @@ export const generateSlotsForCounsellor = async (req, res) => {
  */
 export const deleteSlots = async (req, res) => {
   try {
-    const counsellorId = req.params.id?.trim().toLowerCase();
+    const counsellorId = req.params.id;
     const date = req.query.date;
     const period = req.query.period; // NEW
 
@@ -135,9 +135,7 @@ export const deleteSlots = async (req, res) => {
       });
     }
 
-    // ---------------------------------------------------------
-    // NEW: DELETE specific period (morning/afternoon/evening)
-    // ---------------------------------------------------------
+    //DELETE specific period (morning/afternoon/evening)
     if (period) {
       const valid = ["morning", "afternoon", "evening"];
 
@@ -173,9 +171,7 @@ export const deleteSlots = async (req, res) => {
       });
     }
 
-    // ---------------------------------------------------------
     // ORIGINAL: DELETE ALL slots for a date
-    // ---------------------------------------------------------
     await deleteSlotsForDate(counsellorId, date);
 
     return res.status(200).json({
@@ -192,19 +188,18 @@ export const deleteSlots = async (req, res) => {
   }
 };
 
-
 // ----------------------------------------------
 // GET ALL BOOKED SLOTS FOR A COUNSELLOR + DATE
 // ----------------------------------------------
 export const getBookedSlots = async (req, res) => {
   try {
-    const counsellorId = req.params.id?.trim().toLowerCase();
+    const counsellorId = req.params.id;
     const date = req.query.date;
 
     if (!counsellorId || !date) {
       return res.status(400).json({
         success: false,
-        message: "counsellorId and date are required"
+        message: "counsellorId and date are required",
       });
     }
 
@@ -215,23 +210,23 @@ export const getBookedSlots = async (req, res) => {
       .where("isBooked", "==", true)
       .get();
 
-    const booked = snap.docs.map(doc => doc.data());
+    const booked = snap.docs.map((doc) => doc.data());
 
     return res.json({
       success: true,
       date,
-      bookedSlots: booked.map(s => ({
+      bookedSlots: booked.map((s) => ({
         startTime: s.startTime,
         endTime: s.endTime,
-        period: s.period
-      }))
+        period: s.period,
+      })),
     });
   } catch (err) {
     console.error("getBookedSlots error:", err);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch booked slots",
-      error: err.message
+      error: err.message,
     });
   }
 };
