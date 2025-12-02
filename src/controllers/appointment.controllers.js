@@ -4,7 +4,7 @@ import { emailClient } from "../services/emailService.js";
 import { appointmentConfirmationTemplate } from "../utils/appointmentConfirmation.js";
 import { counsellorNotificationTemplate } from "../utils/counsellorNotification.js";
 
-// const nowTs = () => admin.firestore.FieldValue.servertimeSlotstamp();
+
 const nowTs = () => admin.firestore.FieldValue.serverTimestamp();
 
 import { createZoomMeeting } from "../services/createZoomMeeting.js";
@@ -15,13 +15,13 @@ export const createAppointment = async (req, res) => {
     if (!user) return res.status(401).json({ message: "Unauthorized" });
 
     const {
-      counsellorEmail,
+      counsellorId,
       date,
       timeSlot, // e.g. "09:00-09:30"
       meta = {},
     } = req.body;
 
-    if (!counsellorEmail || !date || !timeSlot) {
+    if (!counsellorId || !date || !timeSlot) {
       return res
         .status(400)
         .json({ message: "counsellorEmail, date and timeSlot are required" });
@@ -49,13 +49,9 @@ export const createAppointment = async (req, res) => {
       });
     }
 
-    const normalizedCounsellorEmail = String(counsellorEmail)
-      .trim()
-      .toLowerCase();
-
-    const counsellorRef = adminDb
+  const counsellorRef = adminDb
       .collection("counsellors")
-      .doc(normalizedCounsellorEmail);
+      .doc(counsellorId); // ⭐ NEW
     const counsellorSnap = await counsellorRef.get();
 
     if (!counsellorSnap.exists) {
@@ -67,8 +63,22 @@ export const createAppointment = async (req, res) => {
       return res.status(403).json({ message: "Counsellor not verified" });
     }
 
+
+    // NEW: Extract sessionPrice safely
+    const sessionPrice =
+      counsellorData?.profileData?.sessionPrice ??
+      counsellorData?.sessionPrice ??
+      null;
+
+    // NEW: Reject if counsellor has not set pricing
+    if (!sessionPrice || isNaN(Number(sessionPrice))) {
+      return res.status(400).json({
+        message: "Counsellor has not set a valid session price",
+      });
+    }
+
     // TIME SLOT VALIDATION USING timeSlots COLLECTION
-    const slotDocId = `${normalizedCounsellorEmail}_${date}_${slotStart}`;
+    const slotDocId = `${counsellorId}_${date}_${slotStart}`;
     const slotRef = adminDb.collection("timeSlots").doc(slotDocId);
     const slotSnap = await slotRef.get();
 
@@ -91,7 +101,7 @@ export const createAppointment = async (req, res) => {
     // >>> EXISTING CONFLICT CHECK (APPOINTMENTS COLLECTION)
     const conflictQuery = await adminDb
       .collection("appointments")
-      .where("counsellorId", "==", normalizedCounsellorEmail)
+      .where("counsellorId", "==", counsellorId)
       .where("date", "==", date)
       .where("timeSlot", "==", timeSlot)
       .limit(1)
@@ -125,7 +135,7 @@ export const createAppointment = async (req, res) => {
 
     const payload = {
       id: appointmentId,
-      counsellorId: normalizedCounsellorEmail,
+      counsellorId,
       counsellorProfileSnapshot: {
         firstName: counsellorData?.profileData?.firstName ?? null,
         lastName: counsellorData?.profileData?.lastName ?? null,
@@ -136,6 +146,8 @@ export const createAppointment = async (req, res) => {
       date,
       timeSlot,
       zoomLink: actualZoomLink,
+
+      amount: Number(sessionPrice),
       meta,
       status: "scheduled",
       createdAt: nowTs(),
@@ -145,10 +157,11 @@ export const createAppointment = async (req, res) => {
     const batch = adminDb.batch();
 
     batch.set(appointmentRef, payload);
-    batch.set(
-      counsellorRef.collection("appointments").doc(appointmentId),
+     batch.set(
+      counsellorRef.collection("appointments").doc(appointmentId), // ⭐ NEW
       payload
     );
+
     batch.set(
       adminDb
         .collection("users")
@@ -208,7 +221,7 @@ export const createAppointment = async (req, res) => {
         (counsellorData?.profileData?.lastName || "");
 
       const counsellorEmailForMail =
-        counsellorData?.email || normalizedCounsellorEmail;
+        counsellorData?.email;
 
       const counsellorHtml = counsellorNotificationTemplate({
         counsellorName,
