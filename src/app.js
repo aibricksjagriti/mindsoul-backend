@@ -15,19 +15,25 @@ import userRoutes from "./routes/user.routes.js";
 //app config
 const app = express();
 
+// Allowed frontend domains
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://mindsoul-frontend.netlify.app",
-  "https://mindsoul-wellness.vercel.app/"
+  "https://mindsoul-wellness.vercel.app"
 ];
 
-// GLOBAL CORS (must be before routes)
-app.use(
-  cors({
-    origin: allowedOrigins,
-    credentials: true,
-  })
-);
+//CORS config(must be before routes)
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // allow mobile/postman
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error("CORS blocked: " + origin), false);
+  },
+  credentials: true,
+};
+
+// GLOBAL CORS
+app.use(cors(corsOptions));
+
 
 app.use(bodyParser.json({
   verify: (req, res, buf) => {
