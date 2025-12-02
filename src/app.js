@@ -9,7 +9,7 @@ import appointmentRoutes from "./routes/appointment.routes.js";
 import timeslotRoutes from "./routes/timeslot.routes.js";
 import quoteRoutes from "./routes/quote.routes.js";
 import userRoutes from "./routes/user.routes.js";
-import paymentRoutes from "./routes/payment.routes.js";
+// import paymentRoutes from "./routes/payment.routes.js";
 
 
 //app config
@@ -49,7 +49,7 @@ app.use("/api/appointment", appointmentRoutes);
 app.use("/api/timeslots", timeslotRoutes);
 app.use("/api", quoteRoutes);
 app.use("/api/users", userRoutes);
-app.use("/api/payment", paymentRoutes)
+// app.use("/api/payment", paymentRoutes)
 
 
 //entry route for deployed backend
