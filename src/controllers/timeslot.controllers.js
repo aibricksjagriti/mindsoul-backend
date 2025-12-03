@@ -75,7 +75,7 @@ export const generateSlotsForCounsellor = async (req, res) => {
     if (!snap.exists) {
       return res.status(404).json({
         success: false,
-        message: "Counsellor not found",
+        message: "Counsellor not found for this timeslot",
       });
     }
 
