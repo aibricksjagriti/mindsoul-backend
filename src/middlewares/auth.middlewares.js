@@ -50,12 +50,16 @@ export const authenticate = (req, res, next) => {
     const decoded = jwt.verify(token, JWT_SECRET);
 
     // Normalize user object
-    req.user = {
-      uid: decoded.uid || decoded.id,
+     req.user = {
+      uid: decoded.uid || decoded.id || null,
+      counsellorId: decoded.counsellorId || null, 
       email: decoded.email || null,
       name: decoded.name || null,
       role: decoded.role || "user",
     };
+    if (decoded.role === "counsellor") {
+    req.user.uid = decoded.counsellorId; // override uid with counsellorId
+}
 
     next();
   } catch (err) {
