@@ -1,5 +1,5 @@
 import express from "express";
-  import { filterCounsellors, getAllCounsellors, getAllCounsellorsById, sendOtp, updateProfile, verifyOtp } from "../controllers/counsellor.controllers.js";
+  import { filterCounsellors, getAllCounsellors, getAllCounsellorsById, getCounsellorAppointments, sendOtp, updateProfile, verifyOtp } from "../controllers/counsellor.controllers.js";
 import { upload } from "../middlewares/uploadImages.js";
 import { authenticate } from "../middlewares/auth.middlewares.js";
 
@@ -22,6 +22,8 @@ router.get("/:id", getAllCounsellorsById);
 
 //filter route for counsellors
 router.get("/filter", filterCounsellors);
+
+router.get("/counsellor-appointments", authenticate, getCounsellorAppointments);
 
 
 export default router;
