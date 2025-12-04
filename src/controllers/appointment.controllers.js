@@ -24,7 +24,7 @@ export const createAppointment = async (req, res) => {
     if (!counsellorId || !date || !timeSlot) {
       return res
         .status(400)
-        .json({ message: "counsellorEmail, date and timeSlot are required" });
+        .json({ message: "counsellorId, date and timeSlot are required" });
     }
 
     // Validate date format
@@ -111,9 +111,8 @@ export const createAppointment = async (req, res) => {
       return res.status(409).json({ message: "timeSlot slot already booked" });
     }
 
-    // -------------------------------------------------
-    // >>> CREATE ZOOM MEETING (UNCHANGED)
-    // -------------------------------------------------
+    // CREATE ZOOM MEETING (UNCHANGED)
+
     if (!process.env.ZOOM_HOST_EMAIL) {
       return res
         .status(500)
@@ -171,22 +170,17 @@ export const createAppointment = async (req, res) => {
       payload
     );
 
-    // ---------------------------------------------------------
-    //   >>> MARK TIMESLOT AS BOOKED IN timeSlots COLLECTION
-    // ---------------------------------------------------------
-    //// --- NEW FOR TIMESLOTS ---
+    //MARK TIMESLOT AS BOOKED IN timeSlots COLLECTION
+
     batch.update(slotRef, {
       isBooked: true,
       bookedBy: user.uid,
       bookedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    //// --- END NEW FOR TIMESLOTS ---
 
     await batch.commit();
 
-    // ---------------------------------------------------------
-    // EMAIL TO USER (UNCHANGED)
-    // ---------------------------------------------------------
+    //  EMAIL TO USER 
     try {
       const counsellorName =
         (counsellorData?.profileData?.firstName || "") +
@@ -211,9 +205,7 @@ export const createAppointment = async (req, res) => {
       console.error("Email sending failed:", mailErr);
     }
 
-    // ---------------------------------------------------------
     // EMAIL TO COUNSELLOR (UNCHANGED)
-    // ---------------------------------------------------------
     try {
       const counsellorName =
         (counsellorData?.profileData?.firstName || "") +
