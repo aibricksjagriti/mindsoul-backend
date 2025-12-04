@@ -4,20 +4,23 @@ import { db } from "./config/firebase.js";
 
 dotenv.config();
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8080;
 
 
-//connect to firestore
 async function testFirestore() {
-  await db
-    .collection("test")
-    .doc("check")
-    .set({ status: "connected", time: new Date() });
-  console.log("Firestore connection successful");
+  try {
+    await db.collection("health").doc("startup").set({
+      status: "ok",
+      time: new Date(),
+    });
+    console.log("Firestore connection OK");
+  } catch (error) {
+    console.error("Firestore test failed:", error.message);
+  }
 }
 testFirestore();
 
-//entry route for deployed backend
+//Health check endpoint 
 app.get("/", (req, res)=> {
   res.send("Hello from Mindsoul Backend");
 })
