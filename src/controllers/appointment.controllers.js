@@ -149,6 +149,12 @@ export const createAppointment = async (req, res) => {
       amount: Number(sessionPrice),
       meta,
       status: "scheduled",
+
+      //payment status
+      paymentStatus: "pending",
+  paymentId: null,
+  orderId: null,
+  signature: null,
       createdAt: nowTs(),
       updatedAt: nowTs(),
     };
