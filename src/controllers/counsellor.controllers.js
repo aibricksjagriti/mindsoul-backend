@@ -1,4 +1,4 @@
-import { adminDb, storage } from "../config/firebase.js";
+import { adminDb, storage, db } from "../config/firebase.js";
 import admin from "firebase-admin";
 import nodemailer from "nodemailer";
 import { getOtpEmailHtml } from "../utils/emailTemplate.js";
@@ -381,7 +381,7 @@ export const updateProfile = async (req, res) => {
       if (!counsellorId) {
       return res.status(400).json({
         success: false,
-        message: "counsellorId is required", // ⭐ NEW
+        message: "counsellorId is required", //  NEW
       });
     }
 
@@ -389,7 +389,7 @@ export const updateProfile = async (req, res) => {
     const normalizedEmail = email.trim().toLowerCase();
         const counsellorRef = adminDb
       .collection("counsellors")
-      .doc(counsellorId); // ⭐ NEW changed from doc(normalizedEmail)
+      .doc(counsellorId); //  NEW changed from doc(normalizedEmail)
     const counsellorSnap = await counsellorRef.get();
 
     if (!counsellorSnap.exists) {
