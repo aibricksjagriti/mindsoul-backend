@@ -14,6 +14,8 @@ router.post("/verify-otp", verifyOtp);
 
 router.post("/update-profile", authenticate, upload.single("profileImage"),  updateProfile);  
 
+router.get("/counsellor-appointments", authenticate, getCounsellorAppointments);
+
 //get counsellors
 router.get("/list", getAllCounsellors);
 
@@ -23,7 +25,6 @@ router.get("/:id", getAllCounsellorsById);
 //filter route for counsellors
 router.get("/filter", filterCounsellors);
 
-router.get("/counsellor-appointments", authenticate, getCounsellorAppointments);
 
 
 export default router;
