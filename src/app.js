@@ -9,7 +9,7 @@ import appointmentRoutes from "./routes/appointment.routes.js";
 import timeslotRoutes from "./routes/timeslot.routes.js";
 import quoteRoutes from "./routes/quote.routes.js";
 import userRoutes from "./routes/user.routes.js";
-// import paymentRoutes from "./routes/payment.routes.js";
+import paymentRoutes from "./routes/payment.routes.js";
 
 
 //app config
@@ -34,6 +34,23 @@ const corsOptions = {
 // GLOBAL CORS
 app.use(cors(corsOptions));
 
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
+
+  // Cloud Run requires handling OPTIONS manually
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  next();
+});
+
+
 
 app.use(bodyParser.json({
   verify: (req, res, buf) => {
@@ -55,7 +72,7 @@ app.use("/api/appointment", appointmentRoutes);
 app.use("/api/timeslots", timeslotRoutes);
 app.use("/api", quoteRoutes);
 app.use("/api/users", userRoutes);
-// app.use("/api/payment", paymentRoutes)
+app.use("/api/payment", paymentRoutes)
 
 
 //entry route for deployed backend
