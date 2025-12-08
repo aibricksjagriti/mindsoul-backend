@@ -230,3 +230,132 @@ export const getBookedSlots = async (req, res) => {
     });
   }
 };
+
+
+/**
+ * ===========================================================
+ * SMART WEEKLY GENERATION — GENERATE NEXT 7 DAYS
+ * POST /api/timeslots/counsellor/:id/generate-week
+ * ===========================================================
+ */
+export const generateNext7Days = async (req, res) => {
+  try {
+    const counsellorId = req.params.id;
+
+    // Ensure weekly schedule exists
+    const weekly = await getWeeklySchedule(counsellorId);
+    if (!weekly) {
+      return res.status(400).json({
+        success: false,
+        message: "Set weekly schedule first",
+      });
+    }
+
+    const today = new Date();
+    const responses = [];
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+
+      const dateStr = d.toISOString().split("T")[0];
+
+      const result = await generateSmartSlotsForDate(counsellorId, dateStr);
+      responses.push({ date: dateStr, ...result });
+    }
+
+    return res.json({
+      success: true,
+      message: "7-day smart generation complete",
+      results: responses,
+    });
+  } catch (err) {
+    console.error("generateNext7Days error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to generate next 7 days",
+      error: err.message,
+    });
+  }
+};
+
+/**
+ * ===========================================================
+ * REFRESH A SINGLE DATE
+ * POST /api/timeslots/counsellor/:id/refresh?date=YYYY-MM-DD
+ * ===========================================================
+ */
+export const refreshDate = async (req, res) => {
+  try {
+    const counsellorId = req.params.id;
+    const dateStr = req.query.date;
+
+    if (!dateStr) {
+      return res.status(400).json({
+        success: false,
+        message: "date is required",
+      });
+    }
+
+    const result = await generateSmartSlotsForDate(counsellorId, dateStr);
+
+    return res.json({
+      success: true,
+      message: "Date refreshed",
+      date: dateStr,
+      result,
+    });
+  } catch (err) {
+    console.error("refreshDate error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to refresh date",
+      error: err.message,
+    });
+  }
+};
+
+/**
+ * ===========================================================
+ * CRON JOB — DAILY ROLLING 7 DAYS GENERATION
+ * ===========================================================
+ */
+export const cronGenerateNext7Days = async (req, res) => {
+  try {
+    // You can later modify this to loop every counsellor
+    const counsellorId = req.params.id;
+
+    const weekly = await getWeeklySchedule(counsellorId);
+    if (!weekly) {
+      return res.status(400).json({
+        success: false,
+        message: "No weekly schedule set",
+      });
+    }
+
+    const today = new Date();
+    const results = [];
+
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const ds = d.toISOString().split("T")[0];
+
+      const result = await generateSmartSlotsForDate(counsellorId, ds);
+      results.push(result);
+    }
+
+    return res.json({
+      success: true,
+      message: "CRON: 7-day rolling generation complete",
+      results,
+    });
+  } catch (err) {
+    console.error("cronGenerateNext7Days error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Cron generation failed",
+      error: err.message,
+    });
+  }
+};
