@@ -9,7 +9,8 @@ import appointmentRoutes from "./routes/appointment.routes.js";
 import timeslotRoutes from "./routes/timeslot.routes.js";
 import quoteRoutes from "./routes/quote.routes.js";
 import userRoutes from "./routes/user.routes.js";
-// import paymentRoutes from "./routes/payment.routes.js";
+import paymentRoutes from "./routes/payment.routes.js";
+import scheduleRoutes from "./routes/schedule.routes.js";
 
 
 //app config
@@ -18,7 +19,11 @@ const app = express();
 // Allowed frontend domains
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://mindsoul-wellness.vercel.app"
+  "https://mindsoul-wellness.vercel.app",
+
+  // local payment testing (delete later)
+    "http://localhost:5173", 
+  "http://localhost:3000",
 ];
 
 //CORS config(must be before routes)
@@ -79,7 +84,8 @@ app.use("/api/appointment", appointmentRoutes);
 app.use("/api/timeslots", timeslotRoutes);
 app.use("/api", quoteRoutes);
 app.use("/api/users", userRoutes);
-// app.use("/api/payment", paymentRoutes)
+app.use("/api/payment", paymentRoutes)
+app.use("/api/schedule", scheduleRoutes);
 
 
 //entry route for deployed backend

@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["http://localhost:5173", "https://mindsoul-frontend.netlify.app", "https://mindsoul-wellness.vercel.app"],
+    "responseHeader": ["Content-Type", "Authorization"],
+    "method": ["GET", "HEAD", "OPTIONS"],
+    "maxAgeSeconds": 3600
+  }
+]
