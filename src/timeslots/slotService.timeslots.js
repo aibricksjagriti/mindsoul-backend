@@ -52,9 +52,23 @@ export const markSlotAsBooked = async (counsellorId, date, startTime, userId) =>
 export const deleteSlotsForDate = async (counsellorId, date) => {
   const slots = await getSlotsForDate(counsellorId, date);
 
-  const batch = db.batch();
-  slots.forEach((slot) => batch.delete(db.collection("timeSlots").doc(slot.id)));
-  await batch.commit();
+  if (slots.length === 0) return true;
+
+  const chunkSize = 400;
+  let index = 0;
+
+  while (index < slots.length) {
+    const batch = db.batch();
+    const chunk = slots.slice(index, index + chunkSize);
+
+    chunk.forEach(slot => {
+      const ref = db.collection("timeSlots").doc(slot.id);
+      batch.delete(ref);
+    });
+
+    await batch.commit();
+    index += chunkSize;
+  }
 
   return true;
 };
