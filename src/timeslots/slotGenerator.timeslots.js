@@ -1,21 +1,3 @@
-// src/timeslots/slotGenerator.timeslots.js
-
-import admin from "firebase-admin";
-import { isFutureDateTime } from "./slotUtils.timeslots.js";
-
-const db = admin.firestore();
-
-/**
- * Generate slots for 1 counsellor for a specific date.
- * 
- * workingHours example:
- * {
- *   morning:   { start: "09:00", end: "12:00" },
- *   afternoon: { start: "14:00", end: "17:00" }
- * }
- * 
- * slotDuration example: 30 (minutes)
- */
 export const generateSlotsForDate = async ({
   counsellorId,
   date,
@@ -27,7 +9,8 @@ export const generateSlotsForDate = async ({
       throw new Error("Missing required fields for slot generation");
     }
 
-    const batch = db.batch();
+    let createdCount = 0;
+    const operations = []; // we collect all write operations here
 
     const periods = Object.keys(workingHours); // morning, afternoon, evening
 
@@ -62,30 +45,50 @@ export const generateSlotsForDate = async ({
           slotEndM
         ).padStart(2, "0")}`;
 
-        // Full timestamp to validate future slots
         const fullTimestamp = `${date}T${startTime}:00`;
 
-        // Skip past time slots
         if (!isFutureDateTime(fullTimestamp)) continue;
 
-        // Firestore doc ID pattern
         const docId = `${counsellorId}_${date}_${startTime}`;
-        const docRef = db.collection("timeSlots").doc(docId);
 
-        batch.set(docRef, {
-          counsellorId,
-          date,
-          period,
-          startTime,
-          endTime,
-          isBooked: false,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        // Instead of doing batch.set() here,
+        // we SAVE this operation in an array:
+        operations.push({
+          docId,
+          data: {
+            counsellorId,
+            date,
+            period,
+            startTime,
+            endTime,
+            isBooked: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
         });
+
+        createdCount++;
       }
     }
 
-    await batch.commit();
-    return { success: true, message: "Slots generated successfully" };
+    // Now safely commit in chunks of 400
+    const chunkSize = 400;
+    for (let i = 0; i < operations.length; i += chunkSize) {
+      const batch = db.batch();
+      const chunk = operations.slice(i, i + chunkSize);
+
+      chunk.forEach((op) => {
+        const ref = db.collection("timeSlots").doc(op.docId);
+        batch.set(ref, op.data);
+      });
+
+      await batch.commit();
+    }
+
+    return {
+      success: true,
+      created: createdCount,
+      message: "Slots generated successfully",
+    };
   } catch (err) {
     console.error("Slot Generation Error:", err);
     return { success: false, message: err.message };
