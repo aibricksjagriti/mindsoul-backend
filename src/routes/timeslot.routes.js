@@ -9,6 +9,7 @@ import {
   refreshDate,
   cronGenerateNext7Days,
 } from "../controllers/timeslot.controllers.js";
+import cronAuth from "../middlewares/cronAuth.middlewares.js";
 
 const router = express.Router();
 
@@ -63,7 +64,7 @@ router.post("/counsellor/:id/generate-week", authenticate, generateNext7Days);
 router.post("/counsellor/:id/refresh", authenticate, refreshDate);
 
 // Daily cron job (Cloud Scheduler)
-router.post("/counsellor/:id/cron-generate", cronGenerateNext7Days); // No auth, internal use
+router.post("/counsellor/:id/cron-generate",cronAuth, cronGenerateNext7Days); // No auth, internal use
 
 
 /**
