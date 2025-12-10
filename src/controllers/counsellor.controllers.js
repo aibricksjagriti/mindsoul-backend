@@ -495,6 +495,22 @@ export const updateProfile = async (req, res) => {
       profileData.imageUrl = imageUrl;
     }
 
+    //  Default schedulePreferences 
+// If schedulePreferences doesn't exist yet, create a default all-true weekly schedule.
+    const existing = counsellorData.schedulePreferences;
+
+if (!existing) {
+  profileData.schedulePreferences = {
+    Monday:    { morning: true, afternoon: true, evening: true },
+    Tuesday:   { morning: true, afternoon: true, evening: true },
+    Wednesday: { morning: true, afternoon: true, evening: true },
+    Thursday:  { morning: true, afternoon: true, evening: true },
+    Friday:    { morning: true, afternoon: true, evening: true },
+    Saturday:  { morning: true, afternoon: true, evening: true },
+    Sunday:    { morning: true, afternoon: true, evening: true }
+  };
+}
+
     // ------------------ FINAL FIRESTORE UPDATE -----------------
     const updatePayload = {
       profileData,
