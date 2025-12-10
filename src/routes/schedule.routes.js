@@ -6,7 +6,7 @@ import {
   updateSchedule,
   addDateException,
   removeDateException,
-} from "../controllers/schedule.controller.js";
+} from "../controllers/schedule.controllers.js";
 
 import { authenticate } from "../middlewares/auth.middlewares.js";
 
