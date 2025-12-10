@@ -6,13 +6,9 @@ import {
   getCounsellorTimeConfig,
 } from "./schedule.service.js";
 
-import {
-  getSlotsForDate,
-} from "../timeslots/slotService.timeslots.js";
+import { getSlotsForDate } from "../timeslots/slotService.timeslots.js";
 
-import {
-  generateSlotsForDate,
-} from "../timeslots/slotGenerator.timeslots.js";
+import { generateSlotsForDate } from "../timeslots/slotGenerator.timeslots.js";
 
 const db = admin.firestore();
 
@@ -35,7 +31,9 @@ export const generateSmartSlotsForDate = async (counsellorId, dateStr) => {
     const finalPeriods = await resolveFinalPeriods(counsellorId, dateStr);
 
     // 2. Load counsellor's periodTimes + slotDuration
-    const { periodTimes, slotDuration } = await getCounsellorTimeConfig(counsellorId);
+    const { periodTimes, slotDuration } = await getCounsellorTimeConfig(
+      counsellorId
+    );
 
     // 3. Build workingHours object in the format generateSlotsForDate expects
     const workingHours = {};
@@ -121,6 +119,18 @@ export const generateSmartSlotsForDate = async (counsellorId, dateStr) => {
       slotDuration,
     });
 
+    // ----------- LOG RESULT TO CLOUD RUN -----------
+    console.log("SMART GENERATION RESULT", {
+      counsellorId,
+      date: dateStr,
+      created: creationResult.created ?? 0,
+      deleted: deletedCount,
+      conflicts: conflictList.length,
+      conflictSlots: conflictList.map((s) => s.id), // optional but very helpful
+      workingHours: Object.keys(workingHours),
+    });
+    // -----------------------------------------------
+
     return {
       success: true,
       created: creationResult.created ?? 0,
@@ -129,7 +139,12 @@ export const generateSmartSlotsForDate = async (counsellorId, dateStr) => {
       message: "Smart slot generation completed",
     };
   } catch (err) {
-    console.error("Smart Slot Generation Error:", err);
+    console.error("SMART GENERATION ERROR", {
+      counsellorId,
+      date: dateStr,
+      error: err.message,
+      stack: err.stack,
+    });
     throw new Error(err.message);
   }
 };
