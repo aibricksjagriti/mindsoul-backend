@@ -45,15 +45,47 @@ export const getScheduleInfo = async (req, res) => {
 export const updateSchedule = async (req, res) => {
   try {
     const counsellorId = req.params.counsellorId;
-    const weeklyData = req.body.weekly;
 
-    if (!weeklyData) {
+    // ⭐ Accept either "weekly" (legacy) OR "schedulePreferences" (frontend-friendly)
+    const weeklyFromBody = req.body?.weekly;
+    const prefsFromBody = req.body?.schedulePreferences;
+
+    // ⭐ Prefer schedulePreferences if provided, otherwise fall back to weekly
+    const incoming = prefsFromBody ?? weeklyFromBody;
+
+    if (!incoming || typeof incoming !== "object") {
       return res.status(400).json({
         success: false,
-        message: "weekly field is required",
+        message:
+          "Request body must include 'schedulePreferences' or 'weekly' object",
       });
     }
 
+    // ⭐ Basic validation: ensure there is at least one day key
+    const dayKeys = Object.keys(incoming);
+    if (dayKeys.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Provided schedule object is empty",
+      });
+    }
+
+    // ⭐ Optional: normalize keys (frontend might send lowercase days)
+    // We keep whatever keys were sent but it's common to send Monday..Sunday
+    const weeklyData = {};
+    for (const k of dayKeys) {
+      const val = incoming[k];
+      if (typeof val !== "object") {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid value for day '${k}' — expected an object with period booleans`,
+        });
+      }
+      // You can add additional validation here for morning/afternoon/evening keys if desired
+      weeklyData[k] = val;
+    }
+
+    // Call service unchanged (service expects the weekly object)
     const result = await updateWeeklySchedule(counsellorId, weeklyData);
 
     return res.status(200).json({
@@ -61,7 +93,6 @@ export const updateSchedule = async (req, res) => {
       message: "Weekly schedule updated",
       ...result,
     });
-
   } catch (err) {
     console.error("Update schedule error:", err);
     return res.status(500).json({
@@ -70,6 +101,7 @@ export const updateSchedule = async (req, res) => {
     });
   }
 };
+
 
 /**
  * ---------------------------------------------------------
