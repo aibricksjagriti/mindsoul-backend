@@ -1,6 +1,8 @@
 // src/controllers/timeslot.controllers.js
 
 import { generateSlotsForDate } from "../timeslots/slotGenerator.timeslots.js";
+import { generateSmartSlotsForDate } from "../services/timeslotGenerator.service.js";
+import { getWeeklySchedule } from "../services/schedule.service.js";
 import {
   getAvailableFutureSlots,
   deleteSlotsForDate,
