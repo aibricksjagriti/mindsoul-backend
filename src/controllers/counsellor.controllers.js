@@ -156,7 +156,7 @@ export const sendOtp = async (req, res) => {
 //     let isNewCounsellor = false;
 
 //     if (existingQuery.empty) {
-    
+
 //       // CHANGE #2: Create counsellor with auto-generated document ID
 //       counsellorRef = adminDb.collection("counsellors").doc(); // NEW auto-generated ID
 
@@ -272,15 +272,15 @@ export const verifyOtp = async (req, res) => {
       .get();
 
     let counsellorRef;
-    let counsellorId;        //store counsellorId centrally
+    let counsellorId; //store counsellorId centrally
     let isNewCounsellor = false;
 
     if (existingQuery.empty) {
       counsellorRef = adminDb.collection("counsellors").doc(); // auto-id
-      counsellorId = counsellorRef.id; 
+      counsellorId = counsellorRef.id;
 
       await counsellorRef.set({
-        counsellorId,               // field
+        counsellorId, // field
         email: normalizedEmail,
         isCounsellor: true,
         isVerified: true,
@@ -291,15 +291,14 @@ export const verifyOtp = async (req, res) => {
       });
 
       isNewCounsellor = true;
-
     } else {
       counsellorRef = existingQuery.docs[0].ref;
-     counsellorId = counsellorRef.id; 
+      counsellorId = counsellorRef.id;
 
       await counsellorRef.update({
         isCounsellor: true,
         isVerified: true,
-        role: "counsellor", 
+        role: "counsellor",
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
     }
@@ -308,7 +307,7 @@ export const verifyOtp = async (req, res) => {
 
     const token = jwt.sign(
       {
-        counsellorId,              //(was undefined earlier)
+        counsellorId, //(was undefined earlier)
         email: normalizedEmail,
         role: "counsellor",
       },
@@ -333,13 +332,12 @@ export const verifyOtp = async (req, res) => {
       success: true,
       isCounsellor: true,
       isVerified: true,
-      counsellorId, 
-      profileCompleted: isNewCounsellor   
+      counsellorId,
+      profileCompleted: isNewCounsellor
         ? false
         : existingQuery.docs[0].data().profileCompleted || false,
       role: "counsellor",
     });
-
   } catch (error) {
     console.error("Error jverifying OTP:", error);
     return res
@@ -347,8 +345,6 @@ export const verifyOtp = async (req, res) => {
       .json({ message: "OTP verification failed", error: error.message });
   }
 };
-
-
 
 //helperfucntion
 const toArray = (value) => {
@@ -378,18 +374,15 @@ export const updateProfile = async (req, res) => {
       slotDuration,
     } = req.body;
 
-      if (!counsellorId) {
+    if (!counsellorId) {
       return res.status(400).json({
         success: false,
         message: "counsellorId is required", //  NEW
       });
     }
 
-
     const normalizedEmail = email.trim().toLowerCase();
-        const counsellorRef = adminDb
-      .collection("counsellors")
-      .doc(counsellorId); //  NEW changed from doc(normalizedEmail)
+    const counsellorRef = adminDb.collection("counsellors").doc(counsellorId); //  NEW changed from doc(normalizedEmail)
     const counsellorSnap = await counsellorRef.get();
 
     if (!counsellorSnap.exists) {
@@ -407,7 +400,6 @@ export const updateProfile = async (req, res) => {
       });
     }
 
-
     // ------------------ BUILD PROFILE DATA ---------------------
     const profileData = {};
 
@@ -421,9 +413,8 @@ export const updateProfile = async (req, res) => {
 
     if (experience) profileData.experience = experience;
 
-
-     // --- NEW FOR TIMESLOTS: Validate + assign workingHours ---
-      if (workingHours) {
+    // --- NEW FOR TIMESLOTS: Validate + assign workingHours ---
+    if (workingHours) {
       try {
         // change #1 — always treat workingHours as a JSON string
         const parsedWH = JSON.parse(workingHours);
@@ -433,7 +424,7 @@ export const updateProfile = async (req, res) => {
         return res.status(400).json({
           success: false,
           message:
-            "workingHours must be valid JSON. Example: { \"morning\": {\"start\":\"09:00\",\"end\":\"12:00\"} }",
+            'workingHours must be valid JSON. Example: { "morning": {"start":"09:00","end":"12:00"} }',
         });
       }
     }
@@ -449,7 +440,6 @@ export const updateProfile = async (req, res) => {
       }
       profileData.slotDuration = parsed;
     }
-
 
     // WORKING DAYS
     if (workingDays) {
@@ -495,21 +485,33 @@ export const updateProfile = async (req, res) => {
       profileData.imageUrl = imageUrl;
     }
 
-    //  Default schedulePreferences 
-// If schedulePreferences doesn't exist yet, create a default all-true weekly schedule.
-    const existing = counsellorData.schedulePreferences;
+    //Default schedulePreferences should match workingHours periods only
+if (!counsellorData.schedulePreferences) {
 
-if (!existing) {
+  // Use the incoming workingHours from profileData FIRST
+  const wh = profileData.workingHours || counsellorData.profileData?.workingHours;
+
+  const hasMorning = wh?.morning ? true : false;
+  const hasAfternoon = wh?.afternoon ? true : false;
+  const hasEvening = wh?.evening ? true : false;
+
+  const defaultDay = {
+    morning: hasMorning,
+    afternoon: hasAfternoon,
+    evening: hasEvening,
+  };
+
   profileData.schedulePreferences = {
-    Monday:    { morning: true, afternoon: true, evening: true },
-    Tuesday:   { morning: true, afternoon: true, evening: true },
-    Wednesday: { morning: true, afternoon: true, evening: true },
-    Thursday:  { morning: true, afternoon: true, evening: true },
-    Friday:    { morning: true, afternoon: true, evening: true },
-    Saturday:  { morning: true, afternoon: true, evening: true },
-    Sunday:    { morning: true, afternoon: true, evening: true }
+    Monday:    { ...defaultDay },
+    Tuesday:   { ...defaultDay },
+    Wednesday: { ...defaultDay },
+    Thursday:  { ...defaultDay },
+    Friday:    { ...defaultDay },
+    Saturday:  { ...defaultDay },
+    Sunday:    { ...defaultDay }
   };
 }
+
 
     // ------------------ FINAL FIRESTORE UPDATE -----------------
     const updatePayload = {
@@ -563,7 +565,6 @@ export const getAllCounsellors = async (req, res) => {
         email: data.email,
         workingDays: data.profileData?.workingDays || [],
         workingHours: data.profileData?.workingHours || {},
-
       };
     });
 
@@ -582,17 +583,14 @@ export const getAllCounsellorsById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    if(!id) {
+    if (!id) {
       return res.status(400).json({
         success: false,
-        message: "Counsellor email is required"
+        message: "Counsellor email is required",
       });
     }
 
-    const docSnap = await adminDb
-      .collection("counsellors")
-      .doc(id) 
-      .get();
+    const docSnap = await adminDb.collection("counsellors").doc(id).get();
 
     if (!docSnap.exists) {
       return res.status(404).json({
@@ -602,8 +600,6 @@ export const getAllCounsellorsById = async (req, res) => {
     }
 
     const data = docSnap.data();
-
-
 
     const counsellor = {
       counsellorId: id,
@@ -641,12 +637,12 @@ export const filterCounsellors = async (req, res) => {
     // Normalizes languages/expertise into clean arrays
     const normalizeQueryArray = (value) => {
       if (!value) return [];
-      
+
       // If Express parsed repeated query params -> array
       if (Array.isArray(value)) {
         return value
           .flatMap((v) => v.split(",")) // split comma groups
-          .map((s) => s.trim())         // remove spaces
+          .map((s) => s.trim()) // remove spaces
           .filter((s) => s.length > 0); // remove empty
       }
 
