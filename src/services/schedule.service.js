@@ -30,16 +30,18 @@ export const getWeeklySchedule = async (counsellorId) => {
  * }
  */
 export const updateWeeklySchedule = async (counsellorId, weeklyData) => {
-  const ref = db
-    .collection("counsellors")
-    .doc(counsellorId)
-    .collection("schedulePreferences")
-    .doc("weekly");
+  const ref = db.collection("counsellors").doc(counsellorId);
 
-  await ref.set({ weekly: weeklyData }, { merge: true });
+  await ref.set(
+    {
+      weeklySchedule: weeklyData
+    },
+    { merge: true }
+  );
 
   return { success: true };
 };
+
 
 /**
  * ---------------------------------------
@@ -107,23 +109,33 @@ export const deleteDateException = async (counsellorId, date) => {
  * from their profile document
  * ---------------------------------------
  */
+// src/services/schedule.service.js
+
 export const getCounsellorTimeConfig = async (counsellorId) => {
   const ref = db.collection("counsellors").doc(counsellorId);
-  const doc = await ref.get();
+  const snap = await ref.get();
 
-  if (!doc.exists) throw new Error("Counsellor profile not found");
+  if (!snap.exists) throw new Error("Counsellor not found");
 
-  const data = doc.data();
+  const data = snap.data();
+  const profile = data.profileData || {};
+  const workingHours = profile.workingHours || {};
+
+  // NEW — convert workingHours → periodTimes
+  const periodTimes = {
+    morning: workingHours.morning ?? null,
+    afternoon: workingHours.afternoon ?? null,
+    evening: workingHours.evening ?? null
+  };
+
+  const slotDuration = profile.slotDuration ?? 30;
 
   return {
-    periodTimes: {
-      morning: data.morning || null,
-      afternoon: data.afternoon || null,
-      evening: data.evening || null,
-    },
-    slotDuration: data.slotDuration || 30,
+    periodTimes,
+    slotDuration
   };
 };
+
 
 /**
  * ---------------------------------------
@@ -132,41 +144,51 @@ export const getCounsellorTimeConfig = async (counsellorId) => {
  * ---------------------------------------
  */
 export const resolveFinalPeriods = async (counsellorId, dateStr) => {
-  const dateObj = new Date(dateStr);
-  const weekday = dateObj.getDay().toString(); // 0–6
+  const ref = db.collection("counsellors").doc(counsellorId);
+  const snap = await ref.get();
 
-  const weekly = await getWeeklySchedule(counsellorId);
-  const exception = await getDateException(counsellorId, dateStr);
+  if (!snap.exists) throw new Error("Counsellor not found");
 
-  if (!weekly) throw new Error("Weekly schedule not set");
+  const data = snap.data();
 
-  let base = weekly.weekly[weekday];
+  // READ WEEKLY SCHEDULE FROM ROOT FIELD
+  const weekly = data.weeklySchedule || {};
 
-  // If no exception → use weekly schedule
-  if (!exception) {
-    return {
-      morning: base.morning,
-      afternoon: base.afternoon,
-      evening: base.evening,
-    };
+  // Convert date → weekday name
+  const dayName = new Date(dateStr).toLocaleDateString("en-US", {
+    weekday: "long",
+  });
+
+  // Default availability for this weekday
+  const base = weekly[dayName] || {
+    morning: false,
+    afternoon: false,
+    evening: false,
+  };
+
+  // Start with weekly schedule as base
+  let final = { ...base };
+
+  // READ DATE EXCEPTION FROM SUBCOLLECTION
+  const excRef = ref.collection("schedulePreferences").doc(dateStr);
+  const excSnap = await excRef.get();
+
+  if (excSnap.exists) {
+    const ex = excSnap.data();
+
+    // Full day off
+    if (ex.off === true) {
+      final = { morning: false, afternoon: false, evening: false };
+    } else {
+      final = {
+        morning: ex.morning ?? final.morning,
+        afternoon: ex.afternoon ?? final.afternoon,
+        evening: ex.evening ?? final.evening,
+      };
+    }
   }
 
-  // Apply exception logic
-  if (exception.overrideType === "full-off") {
-    return { morning: false, afternoon: false, evening: false };
-  }
-
-  if (exception.overrideType === "full-on") {
-    return { morning: true, afternoon: true, evening: true };
-  }
-
-  if (exception.overrideType === "partial") {
-    return {
-      morning: exception.periods.morning,
-      afternoon: exception.periods.afternoon,
-      evening: exception.periods.evening,
-    };
-  }
-
-  return base;
+  return final;
 };
+
+
