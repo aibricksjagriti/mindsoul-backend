@@ -1,3 +1,8 @@
+import admin from "firebase-admin";
+import { isFutureDateTime } from "./slotUtils.timeslots.js";
+
+const db = admin.firestore();
+
 export const generateSlotsForDate = async ({
   counsellorId,
   date,
