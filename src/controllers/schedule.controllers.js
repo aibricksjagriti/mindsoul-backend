@@ -1,5 +1,6 @@
 // src/controllers/schedule.controllers.js
 
+import { db } from "../config/firebase.js";
 import {
   getWeeklySchedule,
   updateWeeklySchedule,
@@ -111,34 +112,57 @@ export const updateSchedule = async (req, res) => {
 export const addDateException = async (req, res) => {
   try {
     const counsellorId = req.params.counsellorId;
-    const { date, overrideType, periods } = req.body;
+    const { date, overrideType, morning, afternoon, evening } = req.body;
 
-    if (!date || !overrideType) {
+    if (!date) {
       return res.status(400).json({
         success: false,
-        message: "date and overrideType are required",
+        message: "date is required",
       });
     }
 
-    const result = await setDateException(counsellorId, date, {
-      overrideType,
-      periods: periods || null,
-    });
+    const ref = db.collection("counsellors").doc(counsellorId);
 
-    return res.status(200).json({
+    // Build exception object
+    let exceptionData = {};
+
+    // FULL DAY OFF
+    if (overrideType === "off") {
+      exceptionData = { off: true };
+    } 
+    // CUSTOM PARTIAL OVERRIDE
+    else {
+      exceptionData = {
+        morning: morning ?? null,
+        afternoon: afternoon ?? null,
+        evening: evening ?? null
+      };
+    }
+
+    // Write into root document using a MAP field
+    await ref.set(
+      {
+        scheduleExceptions: {
+          [date]: exceptionData
+        }
+      },
+      { merge: true }
+    );
+
+    return res.json({
       success: true,
-      message: "Date exception saved",
-      ...result,
+      message: "Date exception saved"
     });
 
   } catch (err) {
-    console.error("Add date exception error:", err);
+    console.error("Add exception error:", err);
     return res.status(500).json({
       success: false,
       message: err.message,
     });
   }
 };
+
 
 /**
  * ---------------------------------------------------------
