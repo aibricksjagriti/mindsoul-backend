@@ -37,7 +37,6 @@ router.get("/counsellor/:id/booked"  getBookedSlots);
 ----------
 */
 
-
 //DELETE WHEN DONE TESTING
 // Get available grouped slots
 //GET /api/timeslots/counsellor/:id/slots?date=YYYY-MM-DD
