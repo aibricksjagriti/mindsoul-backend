@@ -151,35 +151,34 @@ export const resolveFinalPeriods = async (counsellorId, dateStr) => {
 
   const data = snap.data();
 
-  // READ WEEKLY SCHEDULE FROM ROOT FIELD
+  // 1️⃣ Weekly schedule (stored at root level)
   const weekly = data.weeklySchedule || {};
 
-  // Convert date → weekday name
+  // 2️⃣ Convert date → weekday name
   const dayName = new Date(dateStr).toLocaleDateString("en-US", {
     weekday: "long",
   });
 
-  // Default availability for this weekday
+  // 3️⃣ Base availability from weekly schedule
   const base = weekly[dayName] || {
     morning: false,
     afternoon: false,
     evening: false,
   };
 
-  // Start with weekly schedule as base
   let final = { ...base };
 
-  // READ DATE EXCEPTION FROM SUBCOLLECTION
-  const excRef = ref.collection("schedulePreferences").doc(dateStr);
-  const excSnap = await excRef.get();
+  // 4️⃣ READ EXCEPTION FROM ROOT FIELD (NOT subcollection)
+  const exceptions = data.scheduleExceptions || {};
 
-  if (excSnap.exists) {
-    const ex = excSnap.data();
+  const ex = exceptions[dateStr];
 
+  if (ex) {
     // Full day off
     if (ex.off === true) {
       final = { morning: false, afternoon: false, evening: false };
     } else {
+      // Partial override
       final = {
         morning: ex.morning ?? final.morning,
         afternoon: ex.afternoon ?? final.afternoon,
@@ -190,5 +189,6 @@ export const resolveFinalPeriods = async (counsellorId, dateStr) => {
 
   return final;
 };
+
 
 
