@@ -127,8 +127,7 @@ export const generateSlotsForCounsellor = async (req, res) => {
 export const deleteSlots = async (req, res) => {
   try {
     const counsellorId = req.params.id;
-    const date = req.query.date;
-    const period = req.query.period; // NEW
+    const { date, period } = req.query;
 
     if (!counsellorId || !date) {
       return res.status(400).json({
@@ -137,48 +136,70 @@ export const deleteSlots = async (req, res) => {
       });
     }
 
-    //DELETE specific period (morning/afternoon/evening)
-    if (period) {
-      const valid = ["morning", "afternoon", "evening"];
+    const baseQuery = adminDb
+      .collection("timeSlots")
+      .where("counsellorId", "==", counsellorId)
+      .where("date", "==", date);
 
-      if (!valid.includes(period)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid period. Use: morning, afternoon, evening",
-        });
-      }
+    const query = period
+      ? baseQuery.where("period", "==", period)
+      : baseQuery;
 
-      const slotsQuery = await adminDb
-        .collection("timeSlots")
-        .where("counsellorId", "==", counsellorId)
-        .where("date", "==", date)
-        .where("period", "==", period)
-        .get();
-
-      if (slotsQuery.empty) {
-        return res.status(200).json({
-          success: true,
-          message: `No slots found for ${period} on ${date}`,
-        });
-      }
-
-      const batch = adminDb.batch();
-      slotsQuery.forEach((doc) => batch.delete(doc.ref));
-      await batch.commit();
-
-      return res.status(200).json({
-        success: true,
-        message: `All ${period} slots deleted for ${date}`,
-        deletedCount: slotsQuery.size,
+    if (period && !["morning", "afternoon", "evening"].includes(period)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid period. Use: morning, afternoon, evening",
       });
     }
 
-    // ORIGINAL: DELETE ALL slots for a date
-    await deleteSlotsForDate(counsellorId, date);
+    const snapshot = await query.get();
+
+    if (snapshot.empty) {
+      return res.status(200).json({
+        success: true,
+        message: "No slots found",
+        deletedCount: 0,
+        skippedBooked: 0,
+      });
+    }
+
+    let deletedCount = 0;
+    let skippedBooked = 0;
+    let batch = adminDb.batch();
+    let batchOps = 0;
+
+    for (const doc of snapshot.docs) {
+      const slot = doc.data();
+
+      // ⭐ SAFETY: Never delete booked slots
+      if (slot.isBooked) {
+        skippedBooked++;
+        continue;
+      }
+
+      batch.delete(doc.ref);
+      deletedCount++;
+      batchOps++;
+
+      // ⭐ Firestore batch safety (500 limit)
+      if (batchOps === 400) {
+        await batch.commit();
+        batch = adminDb.batch();
+        batchOps = 0;
+      }
+    }
+
+    if (batchOps > 0) {
+      await batch.commit();
+    }
 
     return res.status(200).json({
       success: true,
-      message: `All slots deleted for date: ${date}`,
+      message: period
+        ? `Slots deleted for ${period} on ${date}`
+        : `Slots deleted for ${date}`,
+      deletedCount,
+      skippedBooked,
     });
   } catch (err) {
     console.error("deleteSlots error:", err);
@@ -189,6 +210,7 @@ export const deleteSlots = async (req, res) => {
     });
   }
 };
+
 
 // ----------------------------------------------
 // GET ALL BOOKED SLOTS FOR A COUNSELLOR + DATE
