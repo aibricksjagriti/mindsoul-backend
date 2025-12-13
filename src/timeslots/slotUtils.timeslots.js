@@ -20,15 +20,14 @@ export const groupSlotsByPeriod = (slots = []) => {
   };
 
   for (const slot of slots) {
-    const hour = Number(slot.startTime.split(":")[0]);
-
-    if (hour >= 6 && hour < 12) result.morning.push(slot);
-    else if (hour >= 12 && hour < 17) result.afternoon.push(slot);
-    else result.evening.push(slot);
+    if (result[slot.period]) {
+      result[slot.period].push(slot);
+    }
   }
 
   return result;
 };
+
 
 /**
  * Convert a Firestore date + time fields to a JS Date object
