@@ -9,15 +9,14 @@ const db = admin.firestore();
  * ---------------------------------------
  */
 export const getWeeklySchedule = async (counsellorId) => {
-  const ref = db
-    .collection("counsellors")
-    .doc(counsellorId)
-    .collection("schedulePreferences")
-    .doc("weekly");
+  const ref = db.collection("counsellors").doc(counsellorId);
+  const snap = await ref.get();
 
-  const doc = await ref.get();
-  return doc.exists ? doc.data() : null;
+  if (!snap.exists) return null;
+
+  return snap.data().weeklySchedule || null;
 };
+
 
 /**
  * ---------------------------------------
