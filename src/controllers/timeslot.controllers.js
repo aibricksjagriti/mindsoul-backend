@@ -185,33 +185,46 @@ export const refreshDate = async (req, res) => {
  */
 export const cronGenerateNext7Days = async (req, res) => {
   try {
-    // You can later modify this to loop every counsellor
-    const counsellorId = req.params.id;
+    // 1️⃣ Fetch all active, verified counsellors
+    const counsellorsSnap = await db
+      .collection("counsellors")
+      .where("isVerified", "==", true)
+      .where("profileCompleted", "==", true)
+      .get();
 
-    const weekly = await getWeeklySchedule(counsellorId);
-    if (!weekly) {
-      return res.status(400).json({
-        success: false,
-        message: "No weekly schedule set",
+    if (counsellorsSnap.empty) {
+      return res.json({
+        success: true,
+        message: "CRON: No eligible counsellors found",
       });
     }
 
     const today = new Date();
     const results = [];
 
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
-      const ds = d.toISOString().split("T")[0];
+    // 2️⃣ Loop counsellors
+    for (const doc of counsellorsSnap.docs) {
+      const counsellorId = doc.id;
 
-      const result = await generateSmartSlotsForDate(counsellorId, ds);
-      results.push(result);
+      const weekly = await getWeeklySchedule(counsellorId);
+      if (!weekly) continue; // skip safely
+
+      // 3️⃣ Generate rolling 7 days
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        const ds = d.toISOString().split("T")[0];
+
+        await generateSmartSlotsForDate(counsellorId, ds);
+      }
+
+      results.push(counsellorId);
     }
 
     return res.json({
       success: true,
       message: "CRON: 7-day rolling generation complete",
-      results,
+      counsellorsProcessed: results.length,
     });
   } catch (err) {
     console.error("cronGenerateNext7Days error:", err);
