@@ -11,6 +11,8 @@ import quoteRoutes from "./routes/quote.routes.js";
 import userRoutes from "./routes/user.routes.js";
 // import paymentRoutes from "./routes/payment.routes.js";
 import scheduleRoutes from "./routes/schedule.routes.js";
+import cronRoutes from "./routes/cron.routes.js";
+
 
 
 //app config
@@ -86,6 +88,8 @@ app.use("/api", quoteRoutes);
 app.use("/api/users", userRoutes);
 // app.use("/api/payment", paymentRoutes)
 app.use("/api/schedule", scheduleRoutes);
+app.use("/internal/cron", cronRoutes);
+
 
 
 //entry route for deployed backend
