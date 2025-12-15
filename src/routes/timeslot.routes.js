@@ -2,8 +2,6 @@ import express from "express";
 import {authenticate} from "../middlewares/auth.middlewares.js";
 import {
   getAvailableSlots,
-  generateSlotsForCounsellor,
-  deleteSlots,
   getBookedSlots,
   generateNext7Days,
   refreshDate,
@@ -42,12 +40,6 @@ router.get("/counsellor/:id/booked"  getBookedSlots);
 //GET /api/timeslots/counsellor/:id/slots?date=YYYY-MM-DD
 router.get("/counsellor/:id/slots", getAvailableSlots);
 
-// Manual single-day generation (legacy)
-//BODY : { date : "YYYY-MM-DD" }
-router.post("/counsellor/:id/slots/generate", generateSlotsForCounsellor);
-
-// Delete slots for a date (or specific period)
-router.delete("/counsellor/:id/slots", deleteSlots);
 
 // Get booked slots for a date
 //GET /api/timeslots/counsellor/:id/slots?date=YYYY-MM-DD
