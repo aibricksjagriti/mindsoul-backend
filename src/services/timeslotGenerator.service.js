@@ -111,12 +111,16 @@ export const generateSmartSlotsForDate = async (counsellorId, dateStr) => {
 
     await batchDel.commit();
 
-    // 9. Actually generate the needed slots (creation only)
+    //determine which slots are missing (not already in DB)
+    const missingSlots = expectedSlots.filter((s) => !existingIds.has(s.id));
+
+    //generate ONLY missing slots
     const creationResult = await generateSlotsForDate({
       counsellorId,
       date: dateStr,
       workingHours,
       slotDuration,
+      allowedSlotIds: new Set(missingSlots.map((s) => s.id)),
     });
 
     // ----------- LOG RESULT TO CLOUD RUN -----------
