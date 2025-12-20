@@ -26,9 +26,10 @@ export const getScheduleInfo = async (req, res) => {
     return res.status(200).json({
       success: true,
       weekly: weekly?.weekly || null,
+      weeklySchedule: weekly?.weekly || null, //required frontend alias
+
       timeConfig,
     });
-
   } catch (err) {
     console.error("GET schedule info error:", err);
     return res.status(500).json({
@@ -103,7 +104,6 @@ export const updateSchedule = async (req, res) => {
   }
 };
 
-
 /**
  * ---------------------------------------------------------
  * POST Add/Update Date Exception
@@ -129,13 +129,13 @@ export const addDateException = async (req, res) => {
     // FULL DAY OFF
     if (overrideType === "off") {
       exceptionData = { off: true };
-    } 
+    }
     // CUSTOM PARTIAL OVERRIDE
     else {
       exceptionData = {
         morning: morning ?? null,
         afternoon: afternoon ?? null,
-        evening: evening ?? null
+        evening: evening ?? null,
       };
     }
 
@@ -143,17 +143,16 @@ export const addDateException = async (req, res) => {
     await ref.set(
       {
         scheduleExceptions: {
-          [date]: exceptionData
-        }
+          [date]: exceptionData,
+        },
       },
       { merge: true }
     );
 
     return res.json({
       success: true,
-      message: "Date exception saved"
+      message: "Date exception saved",
     });
-
   } catch (err) {
     console.error("Add exception error:", err);
     return res.status(500).json({
@@ -162,7 +161,6 @@ export const addDateException = async (req, res) => {
     });
   }
 };
-
 
 /**
  * ---------------------------------------------------------
@@ -181,7 +179,6 @@ export const removeDateException = async (req, res) => {
       message: "Date exception removed",
       ...result,
     });
-
   } catch (err) {
     console.error("Delete date exception error:", err);
     return res.status(500).json({
