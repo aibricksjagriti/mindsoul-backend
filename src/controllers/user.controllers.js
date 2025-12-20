@@ -172,7 +172,7 @@ export const getUserAppointments = async (req, res) => {
           ? `${data.counsellorProfileSnapshot.firstName || ""} ${
               data.counsellorProfileSnapshot.lastName || ""
             }`.trim()
-          : null); // ⭐ NEW
+          : null); //  NEW
 
       return {
         id: doc.id,

@@ -47,11 +47,11 @@ export const updateSchedule = async (req, res) => {
   try {
     const counsellorId = req.params.counsellorId;
 
-    // ⭐ Accept either "weekly" (legacy) OR "schedulePreferences" (frontend-friendly)
+    //  Accept either "weekly" (legacy) OR "schedulePreferences" (frontend-friendly)
     const weeklyFromBody = req.body?.weekly;
     const prefsFromBody = req.body?.schedulePreferences;
 
-    // ⭐ Prefer schedulePreferences if provided, otherwise fall back to weekly
+    //  Prefer schedulePreferences if provided, otherwise fall back to weekly
     const incoming = prefsFromBody ?? weeklyFromBody;
 
     if (!incoming || typeof incoming !== "object") {
@@ -62,7 +62,7 @@ export const updateSchedule = async (req, res) => {
       });
     }
 
-    // ⭐ Basic validation: ensure there is at least one day key
+    //  Basic validation: ensure there is at least one day key
     const dayKeys = Object.keys(incoming);
     if (dayKeys.length === 0) {
       return res.status(400).json({
@@ -71,7 +71,7 @@ export const updateSchedule = async (req, res) => {
       });
     }
 
-    // ⭐ Optional: normalize keys (frontend might send lowercase days)
+    //  Optional: normalize keys (frontend might send lowercase days)
     // We keep whatever keys were sent but it's common to send Monday..Sunday
     const weeklyData = {};
     for (const k of dayKeys) {

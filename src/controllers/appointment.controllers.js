@@ -51,7 +51,7 @@ export const createAppointment = async (req, res) => {
 
   const counsellorRef = adminDb
       .collection("counsellors")
-      .doc(counsellorId); // ⭐ NEW
+      .doc(counsellorId); //  NEW
     const counsellorSnap = await counsellorRef.get();
 
     if (!counsellorSnap.exists) {
@@ -163,7 +163,7 @@ export const createAppointment = async (req, res) => {
 
     batch.set(appointmentRef, payload);
      batch.set(
-      counsellorRef.collection("appointments").doc(appointmentId), // ⭐ NEW
+      counsellorRef.collection("appointments").doc(appointmentId), //  NEW
       payload
     );
 
