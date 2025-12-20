@@ -33,7 +33,12 @@ export const getAvailableFutureSlots = async (counsellorId, date) => {
 /**
  * Mark a slot as booked (used as a fallback, though appointment.controller uses batch)
  */
-export const markSlotAsBooked = async (counsellorId, date, startTime, userId) => {
+export const markSlotAsBooked = async (
+  counsellorId,
+  date,
+  startTime,
+  userId
+) => {
   const slotId = `${counsellorId}_${date}_${startTime}`;
   const slotRef = db.collection("timeSlots").doc(slotId);
 
@@ -61,7 +66,8 @@ export const deleteSlotsForDate = async (counsellorId, date) => {
     const batch = db.batch();
     const chunk = slots.slice(index, index + chunkSize);
 
-    chunk.forEach(slot => {
+    chunk.forEach((slot) => {
+      if (slot.isBooked) return; //never delete booked slots
       const ref = db.collection("timeSlots").doc(slot.id);
       batch.delete(ref);
     });
