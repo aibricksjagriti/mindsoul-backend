@@ -8,6 +8,7 @@ export const generateSlotsForDate = async ({
   date,
   workingHours,
   slotDuration,
+  allowedSlotIds = null,
 }) => {
   try {
     if (!counsellorId || !date || !workingHours || !slotDuration) {
@@ -55,6 +56,10 @@ export const generateSlotsForDate = async ({
         if (!isFutureDateTime(fullTimestamp)) continue;
 
         const docId = `${counsellorId}_${date}_${startTime}`;
+        // skip if not explicitly allowed
+        if (allowedSlotIds && !allowedSlotIds.has(docId)) {
+          continue;
+        }
 
         // Instead of doing batch.set() here,
         // we SAVE this operation in an array:
