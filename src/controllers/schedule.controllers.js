@@ -25,8 +25,8 @@ export const getScheduleInfo = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      weekly: weekly?.weekly || null,
-      weeklySchedule: weekly?.weekly || null, //required frontend alias
+      weekly: weekly || null,
+      weeklySchedule: weekly || null,
 
       timeConfig,
     });
