@@ -15,6 +15,10 @@ export const generateSlotsForDate = async ({
       throw new Error("Missing required fields for slot generation");
     }
 
+    const expiresAt = admin.firestore.Timestamp.fromDate(
+      new Date(`${date}T23:59:59`)
+    );
+
     let createdCount = 0;
     const operations = []; // we collect all write operations here
 
@@ -72,6 +76,7 @@ export const generateSlotsForDate = async ({
             startTime,
             endTime,
             isBooked: false,
+            expiresAt,
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           },
         });
