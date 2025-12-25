@@ -8,65 +8,68 @@ export const generateSlotsForDate = async ({
   date,
   workingHours,
   slotDuration,
-  allowedSlotIds = null,
 }) => {
   try {
     if (!counsellorId || !date || !workingHours || !slotDuration) {
       throw new Error("Missing required fields for slot generation");
     }
 
+    //DELETE EXISTING SLOTS FOR THIS COUNSELLOR + DATE
+    const existingSnap = await db
+      .collection("timeSlots")
+      .where("counsellorId", "==", counsellorId)
+      .where("date", "==", date)
+      .get();
+
+    const deleteBatch = db.batch();
+    existingSnap.docs.forEach((doc) => deleteBatch.delete(doc.ref));
+    await deleteBatch.commit();
+
     const expiresAt = admin.firestore.Timestamp.fromDate(
       new Date(`${date}T23:59:59`)
     );
 
+    const operations = [];
     let createdCount = 0;
-    const operations = []; // we collect all write operations here
 
-    const periods = Object.keys(workingHours); // morning, afternoon, evening
+    const SESSION_DURATION = slotDuration; // 30
+    const BREAK_DURATION = 15; // fixed rule
+    const STEP = SESSION_DURATION + BREAK_DURATION; // 45
 
-    for (const period of periods) {
+    for (const period of Object.keys(workingHours)) {
       const periodData = workingHours[period];
       if (!periodData?.start || !periodData?.end) continue;
 
-      const start = periodData.start;
-      const end = periodData.end;
-
-      let [sh, sm] = start.split(":").map(Number);
-      let [eh, em] = end.split(":").map(Number);
+      const [sh, sm] = periodData.start.split(":").map(Number);
+      const [eh, em] = periodData.end.split(":").map(Number);
 
       const startMinutes = sh * 60 + sm;
       const endMinutes = eh * 60 + em;
 
-      for (let t = startMinutes; t < endMinutes; t += slotDuration) {
-        const slotStartH = Math.floor(t / 60);
-        const slotStartM = t % 60;
-        const slotEndMinutes = t + slotDuration;
+      for (
+        let t = startMinutes;
+        t + SESSION_DURATION <= endMinutes;
+        t += STEP
+      ) {
+        const startH = Math.floor(t / 60);
+        const startM = t % 60;
 
-        if (slotEndMinutes > endMinutes) break;
+        const endT = t + SESSION_DURATION;
+        const endH = Math.floor(endT / 60);
+        const endM = endT % 60;
 
-        const slotEndH = Math.floor(slotEndMinutes / 60);
-        const slotEndM = slotEndMinutes % 60;
-
-        const startTime = `${String(slotStartH).padStart(2, "0")}:${String(
-          slotStartM
+        const startTime = `${String(startH).padStart(2, "0")}:${String(
+          startM
+        ).padStart(2, "0")}`;
+        const endTime = `${String(endH).padStart(2, "0")}:${String(
+          endM
         ).padStart(2, "0")}`;
 
-        const endTime = `${String(slotEndH).padStart(2, "0")}:${String(
-          slotEndM
-        ).padStart(2, "0")}`;
+        const docId = `${counsellorId}_${date}_${period}_${startTime}`;
 
-        const fullTimestamp = `${date}T${startTime}:00`;
+        // DEBUG (keep this!)
+        console.log("SLOT", { period, startTime, endTime });
 
-        if (!isFutureDateTime(fullTimestamp)) continue;
-
-        const docId = `${counsellorId}_${date}_${startTime}`;
-        // skip if not explicitly allowed
-        if (allowedSlotIds && !allowedSlotIds.has(docId)) {
-          continue;
-        }
-
-        // Instead of doing batch.set() here,
-        // we SAVE this operation in an array:
         operations.push({
           docId,
           data: {
@@ -86,16 +89,13 @@ export const generateSlotsForDate = async ({
     }
 
     // Now safely commit in chunks of 400
+    // batch write
     const chunkSize = 400;
     for (let i = 0; i < operations.length; i += chunkSize) {
       const batch = db.batch();
-      const chunk = operations.slice(i, i + chunkSize);
-
-      chunk.forEach((op) => {
-        const ref = db.collection("timeSlots").doc(op.docId);
-        batch.set(ref, op.data);
+      operations.slice(i, i + chunkSize).forEach((op) => {
+        batch.set(db.collection("timeSlots").doc(op.docId), op.data);
       });
-
       await batch.commit();
     }
 
