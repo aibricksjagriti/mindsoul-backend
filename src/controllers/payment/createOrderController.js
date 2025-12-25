@@ -14,7 +14,6 @@ export const createRazorpayOrder = async (req, res) => {
 
     const { appointmentId, currency = "INR" } = req.body;
 
-     
     // NEW: appointmentId must be provided
     if (!appointmentId) {
       return res.status(400).json({
@@ -23,9 +22,10 @@ export const createRazorpayOrder = async (req, res) => {
       });
     }
 
-     
     // NEW: Fetch appointment from Firestore
-    const appointmentRef = adminDb.collection("appointments").doc(appointmentId);
+    const appointmentRef = adminDb
+      .collection("appointments")
+      .doc(appointmentId);
     const appointmentSnap = await appointmentRef.get();
 
     if (!appointmentSnap.exists) {
@@ -37,9 +37,40 @@ export const createRazorpayOrder = async (req, res) => {
 
     const appointmentData = appointmentSnap.data();
 
-     
-    // NEW: Extract backend-controlled amount (sessionPrice)
-    const amount = Number(appointmentData.amount); // amount stored in rupees
+    //OWNERSHIP CHECK (MUST BE HERE)
+
+    if (appointmentData.studentUid !== user.uid) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not allowed to pay for this appointment",
+      });
+    }
+
+    // Fetch counsellor name for payment display
+    const counsellorRef = adminDb
+      .collection("counsellors")
+      .doc(appointmentData.counsellorId);
+
+    const counsellorSnap = await counsellorRef.get();
+
+    const c = counsellorSnap.data();
+    const counsellorName =
+      `${c?.profileData?.firstName || ""} ${
+        c?.profileData?.lastName || ""
+      }`.trim() || "Counsellor";
+
+    //prefer appointment amount, fallback to counsellor price
+    const amount = Number(
+      appointmentData.amount ?? counsellorSnap.data()?.sessionPrice
+    );
+
+    //Prevent duplicate Razorpay orders
+    if (appointmentData.razorpayOrderId) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment order already created for this appointment",
+      });
+    }
 
     if (!amount || isNaN(amount)) {
       return res.status(400).json({
@@ -50,26 +81,31 @@ export const createRazorpayOrder = async (req, res) => {
 
     // Razorpay only accepts amount in paise (₹1 = 100 paise)
     const options = {
-      amount: Math.round(amount * 100), // always convert rupees → paise
+      amount: Math.round(amount * 100),
       currency,
       receipt: `receipt_${appointmentId}`,
+
+      // ADD metadata
+      notes: {
+        appointmentId,
+        counsellorName,
+        userId: user.uid,
+      },
     };
 
     const order = await razorpay.orders.create(options);
 
-     //Save generated Razorpay order id inside appointment
     await appointmentRef.update({
-      razorpayOrderId: order.id,  
-      updatedAt: new Date(),       
+      razorpayOrderId: order.id,
+      updatedAt: new Date(),
     });
 
     return res.status(200).json({
       success: true,
       message: "Razorpay order created successfully",
       order,
-      key: process.env.RAZORPAY_KEY_ID, // For frontend checkout
-      appointmentId, 
-      counsellorName: appointmentData.counsellorName, 
+      appointmentId,
+      counsellorName,
     });
   } catch (error) {
     console.error("Razorpay Order Error:", error);
@@ -81,44 +117,58 @@ export const createRazorpayOrder = async (req, res) => {
   }
 };
 
-
 // ------------------------------------------------------------
 // TEST MODE: Razorpay Order Creation (No Auth, No Firestore)
 // ------------------------------------------------------------
 
-// export const createRazorpayOrder_Test = async (req, res) => {
-//   try {
-//     const { amount = 500, currency = "INR" } = req.body;
+export const createRazorpayOrder_Test = async (req, res) => {
+  try {
+    // ❌ REMOVE amount from client in production
+    // const { amount = 500, currency = "INR" } = req.body;
 
-//     if (!amount || isNaN(amount)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Amount is required and must be a number.",
-//       });
-//     }
+    //  TEMP TEST-ONLY FIX (explicit, predictable)
+    // ⚠️ DO NOT USE THIS IN PRODUCTION
+    const amount = 500; // ₹500 fixed test amount
+    const currency = "INR";
 
-//     // Razorpay requires paise
-//     const options = {
-//       amount: Math.round(Number(amount) * 100),
-//       currency,
-//       receipt: `test_receipt_${Date.now()}`,
-//     };
+    //  Defensive check (still fine)
+    if (!amount || isNaN(amount)) {
+      return res.status(400).json({
+        success: false,
+        message: "Amount is required and must be a number.",
+      });
+    }
 
-//     const order = await razorpay.orders.create(options);
+    //  Razorpay requires amount in paise (this part is CORRECT)
+    const options = {
+      amount: Math.round(Number(amount) * 100), // 50000 paise
+      currency,
+      receipt: `test_receipt_${Date.now()}`,
+    };
 
-//     return res.status(200).json({
-//       success: true,
-//       message: "Test Razorpay order created successfully",
-//       order,
-//       key: process.env.RAZORPAY_KEY_ID, // frontend will use this
-//     });
+    const order = await razorpay.orders.create(options);
 
-//   } catch (error) {
-//     console.error("Test Razorpay Order Error:", error);
-//     return res.status(500).json({
-//       success: false,
-//       message: "Failed to create Razorpay test order",
-//       error: error.message,
-//     });
-//   }
-// };
+    //  LOG FOR DEBUG (ADD THIS)
+    console.log("RAZORPAY TEST ORDER", {
+      id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+    });
+    console.log("BACKEND RAZORPAY KEY:", process.env.RAZORPAY_KEY_ID);
+
+    return res.status(200).json({
+      success: true,
+      order, // frontend already expects this shape
+
+      // ❌ REMOVE THIS — frontend already has the key
+      // key: process.env.RAZORPAY_KEY_ID,
+    });
+  } catch (error) {
+    console.error("Test Razorpay Order Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to create Razorpay test order",
+      error: error.message,
+    });
+  }
+};
