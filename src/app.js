@@ -12,6 +12,7 @@ import userRoutes from "./routes/user.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
 import scheduleRoutes from "./routes/schedule.routes.js";
 import cronRoutes from "./routes/cron.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
 
 
 
@@ -89,6 +90,8 @@ app.use("/api/users", userRoutes);
 app.use("/api/payment", paymentRoutes)
 app.use("/api/schedule", scheduleRoutes);
 app.use("/internal/cron", cronRoutes);
+app.use("/api/admin", adminRoutes);
+
 
 
 
