@@ -1,11 +1,12 @@
 import dotenv from "dotenv";
+dotenv.config();
+
+console.log("BOOT: server.js loaded");
+
 import app from "./app.js";
 import { db } from "./config/firebase.js";
 
-dotenv.config();
-
 const PORT = process.env.PORT || 8080;
-
 
 async function testFirestore() {
   try {
