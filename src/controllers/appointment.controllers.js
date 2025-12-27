@@ -96,21 +96,6 @@ export const createAppointment = async (req, res) => {
       });
     }
 
-    //// --- END NEW FOR TIMESLOTS ---
-    // >>> EXISTING CONFLICT CHECK (APPOINTMENTS COLLECTION)
-    const conflictQuery = await adminDb
-      .collection("appointments")
-      .where("counsellorId", "==", counsellorId)
-      .where("date", "==", date)
-      .where("timeSlot", "==", timeSlot)
-      .where("paymentStatus", "in", ["pending", "success"])
-      .limit(1)
-      .get();
-
-    if (!conflictQuery.empty) {
-      return res.status(409).json({ message: "timeSlot slot already booked" });
-    }
-
     // CREATE ZOOM MEETING (UNCHANGED)
 
     if (!process.env.ZOOM_HOST_EMAIL) {
@@ -182,6 +167,12 @@ export const createAppointment = async (req, res) => {
       payload
     );
 
+    //do not re-book an already booked slot
+    if (slotData.isBooked === true) {
+      return res.status(409).json({
+        message: "This time slot is already booked",
+      });
+    }
     //MARK TIMESLOT AS BOOKED IN timeSlots COLLECTION
 
     batch.update(slotRef, {
