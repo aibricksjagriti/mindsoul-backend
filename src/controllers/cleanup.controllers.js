@@ -26,6 +26,11 @@ export const cleanupExpiredAppointments = async (req, res) => {
     for (const doc of snap.docs) {
       const apt = doc.data();
 
+      if (apt.paymentStatus !== "pending") {
+        console.log("Skipping non-pending appointment:", doc.id);
+        continue;
+      }
+
       //skip malformed data
       if (!apt || !apt.timeSlot || !apt.counsellorId || !apt.date) {
         console.warn("Skipping malformed appointment:", doc.id);
