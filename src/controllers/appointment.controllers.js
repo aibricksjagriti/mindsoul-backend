@@ -103,6 +103,7 @@ export const createAppointment = async (req, res) => {
       .where("counsellorId", "==", counsellorId)
       .where("date", "==", date)
       .where("timeSlot", "==", timeSlot)
+      .where("paymentStatus", "in", ["pending", "success"])
       .limit(1)
       .get();
 
@@ -132,6 +133,7 @@ export const createAppointment = async (req, res) => {
     const appointmentId = appointmentRef.id;
 
     const payload = {
+      appointmentId: appointmentId, // frontend
       id: appointmentId,
       counsellorId,
       counsellorProfileSnapshot: {
