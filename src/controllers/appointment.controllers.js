@@ -1,9 +1,5 @@
 import { adminDb, auth, db } from "../config/firebase.js";
-import admin from "firebase-admin"; // default import STILL available
-import { emailClient } from "../services/emailService.js";
-import { appointmentConfirmationTemplate } from "../utils/appointmentConfirmation.js";
-import { counsellorNotificationTemplate } from "../utils/counsellorNotification.js";
-
+import admin from "firebase-admin";
 
 const nowTs = () => admin.firestore.FieldValue.serverTimestamp();
 
@@ -37,7 +33,7 @@ export const createAppointment = async (req, res) => {
       return res.status(400).json({ message: "Invalid timeSlot slot format" });
     }
 
-    //   NEW: BLOCK PAST SLOTS (CRITICAL FIX)
+    //   BLOCK PAST SLOTS (CRITICAL FIX)
     const [slotStart, slotEnd] = timeSlot.split("-");
     const slotStartDateTime = new Date(`${date}T${slotStart}:00`);
 
@@ -49,9 +45,7 @@ export const createAppointment = async (req, res) => {
       });
     }
 
-  const counsellorRef = adminDb
-      .collection("counsellors")
-      .doc(counsellorId); //  NEW
+    const counsellorRef = adminDb.collection("counsellors").doc(counsellorId); //  NEW
     const counsellorSnap = await counsellorRef.get();
 
     if (!counsellorSnap.exists) {
@@ -63,38 +57,43 @@ export const createAppointment = async (req, res) => {
       return res.status(403).json({ message: "Counsellor not verified" });
     }
 
-
-    // NEW: Extract sessionPrice safely
+    // Extract sessionPrice safely
     const sessionPrice =
       counsellorData?.profileData?.sessionPrice ??
       counsellorData?.sessionPrice ??
       null;
 
-    // NEW: Reject if counsellor has not set pricing
+    // Reject if counsellor has not set pricing
     if (!sessionPrice || isNaN(Number(sessionPrice))) {
       return res.status(400).json({
         message: "Counsellor has not set a valid session price",
       });
     }
 
-    // TIME SLOT VALIDATION USING timeSlots COLLECTION
-    const slotDocId = `${counsellorId}_${date}_${slotStart}`;
-    const slotRef = adminDb.collection("timeSlots").doc(slotDocId);
-    const slotSnap = await slotRef.get();
+    const normalizedSlotStart = slotStart.trim(); // reuse earlier slotStart
 
-    if (!slotSnap.exists) {
+    const slotQuerySnap = await adminDb
+      .collection("timeSlots")
+      .where("counsellorId", "==", counsellorId)
+      .where("date", "==", date)
+      .where("startTime", "==", normalizedSlotStart)
+      .limit(1)
+      .get();
+
+    if (slotQuerySnap.empty) {
       return res.status(400).json({
         message: "Invalid or unavailable time slot",
       });
     }
 
-    const slotData = slotSnap.data();
+    const slotRef = slotQuerySnap.docs[0].ref;
+    const slotData = slotQuerySnap.docs[0].data();
 
-    // ------------------ Reject if slot already booked ------------------
+    // Reject if already booked
     if (slotData.isBooked) {
-      return res
-        .status(409)
-        .json({ message: "This time slot is already booked" });
+      return res.status(409).json({
+        message: "This time slot is already booked",
+      });
     }
 
     //// --- END NEW FOR TIMESLOTS ---
@@ -148,13 +147,18 @@ export const createAppointment = async (req, res) => {
 
       amount: Number(sessionPrice),
       meta,
-      status: "scheduled",
+      status: "pending_payment",
 
       //payment status
       paymentStatus: "pending",
-  paymentId: null,
-  orderId: null,
-  signature: null,
+
+      //payment expiry 10 minutes
+      paymentExpiresAt: admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() + 10 * 60 * 1000)
+      ),
+      paymentId: null,
+      orderId: null,
+      signature: null,
       createdAt: nowTs(),
       updatedAt: nowTs(),
     };
@@ -162,7 +166,7 @@ export const createAppointment = async (req, res) => {
     const batch = adminDb.batch();
 
     batch.set(appointmentRef, payload);
-     batch.set(
+    batch.set(
       counsellorRef.collection("appointments").doc(appointmentId), //  NEW
       payload
     );
@@ -186,63 +190,9 @@ export const createAppointment = async (req, res) => {
 
     await batch.commit();
 
-    //  EMAIL TO USER 
-    try {
-      const counsellorName =
-        (counsellorData?.profileData?.firstName || "") +
-        " " +
-        (counsellorData?.profileData?.lastName || "");
-
-      const html = appointmentConfirmationTemplate({
-        studentName: user.name || user.email,
-        counsellorName,
-        date,
-        timeSlot,
-        zoomLink: actualZoomLink,
-      });
-
-      await emailClient.sendMail({
-        from: `MINDSOUL <${process.env.MAIL_USER}>`,
-        to: user.email,
-        subject: "Hello User, Your Counselling Appointment is Confirmed",
-        html,
-      });
-    } catch (mailErr) {
-      console.error("Email sending failed:", mailErr);
-    }
-
-    // EMAIL TO COUNSELLOR (UNCHANGED)
-    try {
-      const counsellorName =
-        (counsellorData?.profileData?.firstName || "") +
-        " " +
-        (counsellorData?.profileData?.lastName || "");
-
-      const counsellorEmailForMail =
-        counsellorData?.email;
-
-      const counsellorHtml = counsellorNotificationTemplate({
-        counsellorName,
-        studentName: user.name || user.email,
-        studentEmail: user.email,
-        date,
-        timeSlot,
-        startUrl: zoomMeeting.startUrl,
-      });
-
-      await emailClient.sendMail({
-        from: `MINDSOUL <${process.env.MAIL_USER}>`,
-        to: counsellorEmailForMail,
-        subject: "Hello Counsellor, You have a new appointment",
-        html: counsellorHtml,
-      });
-    } catch (cMailErr) {
-      console.error("Counsellor email sending failed:", cMailErr);
-    }
-
     return res.status(201).json({
       success: true,
-      message: "Appointment created",
+      message: "Appointment created. Awaiting payment.",
       appointment: payload,
     });
   } catch (err) {
