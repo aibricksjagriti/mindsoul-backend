@@ -53,21 +53,21 @@ export const cleanupExpiredAppointments = async (req, res) => {
         .limit(1)
         .get();
 
-      // 4. Release slot if found
+      // 4. Release slot ONLY if this appointment owns it
       if (!slotSnap.empty) {
-        const slotRef = slotSnap.docs[0].ref;
+        const slotDoc = slotSnap.docs[0];
+        const slotData = slotDoc.data();
 
-        batch.update(slotRef, {
-          isBooked: false,
-          bookedBy: admin.firestore.FieldValue.delete(),
-          bookedAt: admin.firestore.FieldValue.delete(),
-        });
-      } else {
-        console.warn(
-          "Slot not found for expired appointment:",
-          doc.id,
-          apt.timeSlot
-        );
+        //SAFETY: only release if this appointment booked it
+        if (slotData.bookedBy === apt.studentId) {
+          batch.update(slotDoc.ref, {
+            isBooked: false,
+            bookedBy: admin.firestore.FieldValue.delete(),
+            bookedAt: admin.firestore.FieldValue.delete(),
+          });
+        } else {
+          console.warn("Skipping slot release (ownership mismatch):", doc.id);
+        }
       }
 
       // 5. Mark appointment as expired
