@@ -90,12 +90,19 @@ export const razorpayWebhook = async (req, res) => {
         return res.status(200).send("PRICE_MISMATCH_IGNORED");
       }
 
-      //6.1 Update appointment
-      await appointmentRef.update({
+      //  6 Update appointment
+
+       await appointmentRef.update({
+        //Appointment state
+        status: "confirmed",
         paymentStatus: "success",
-        "meta.status": "confirmed",
-        paidAt: new Date(),
-        updatedAt: new Date(),
+
+        //Top-level payment fields
+        orderId: payment.order_id,
+        paymentId: payment.id,
+        signature: signature,
+
+        //Canonical payment object
         paymentDetails: {
           orderId: payment.order_id,
           paymentId: payment.id,
@@ -103,26 +110,21 @@ export const razorpayWebhook = async (req, res) => {
           currency: payment.currency,
           status: payment.status,
           method: payment.method || null,
-          captured: payment.captured || false,
-          signature: signature,
+          captured: true,
           createdAt: new Date(),
-          razorpayMeta: {
+          raw: {
             paymentId: payment.id,
             orderId: payment.order_id,
             status: payment.status,
           },
         },
-      });
 
-      await appointmentRef.update({
-        paymentStatus: "success",
-        paymentDetails,
-        "meta.status": "confirmed",
         paidAt: new Date(),
         updatedAt: new Date(),
       });
 
-      //  6.2 Payments master collection (UPSERT) Ensures payment history parity
+
+      //  6 Payments master collection (UPSERT) Ensures payment history parity
 
       await adminDb
         .collection("payments")
@@ -146,7 +148,7 @@ export const razorpayWebhook = async (req, res) => {
           { merge: true }
         );
 
-      //  6.3 Subcollection sync (dashboard parity)
+      //  6 Subcollection sync (dashboard parity)
 
       await adminDb
         .collection("counsellors")
