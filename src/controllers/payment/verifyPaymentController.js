@@ -203,7 +203,7 @@ export const verifyRazorpayPayment = async (req, res) => {
     -------------------------------------------------- */
     await appointmentRef.update({
       //core appointment status
-      status: "confirmed",
+      status: "scheduled",
       paymentStatus: "success",
 
       //clear expiry timing
