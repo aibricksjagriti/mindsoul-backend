@@ -94,7 +94,7 @@ export const razorpayWebhook = async (req, res) => {
 
        await appointmentRef.update({
         //Appointment state
-        status: "confirmed",
+        status: "scheduled",
         paymentStatus: "success",
 
         //Top-level payment fields
