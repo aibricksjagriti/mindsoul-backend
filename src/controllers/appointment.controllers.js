@@ -35,7 +35,23 @@ export const createAppointment = async (req, res) => {
 
     //   BLOCK PAST SLOTS (CRITICAL FIX)
     const [slotStart, slotEnd] = timeSlot.split("-");
-    const slotStartDateTime = new Date(`${date}T${slotStart}:00`);
+    // const slotStartDateTime = new Date(`${date}T${slotStart}:00`);
+
+    const [hour, minute] = slotStart.split(":").map(Number);
+
+    const slotStartDateTime = new Date();
+    const [year, month, day] = date.split("-").map(Number);
+
+    slotStartDateTime.setFullYear(year, month - 1, day);
+    slotStartDateTime.setHours(hour, minute, 0, 0);
+
+    // Check if selected slot start time is in the past (LOCAL TIME SAFE)
+    if (slotStartDateTime.getTime() <= Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: "This time slot has already passed",
+      });
+    }
 
     // Check if selected slot start time is in the past
     if (slotStartDateTime.getTime() < Date.now()) {
@@ -141,7 +157,7 @@ export const createAppointment = async (req, res) => {
 
       //payment expiry 10 minutes
       paymentExpiresAt: admin.firestore.Timestamp.fromDate(
-        new Date(Date.now() + 10 * 60 * 1000)
+        new Date(Date.now() + 3 * 60 * 1000)
       ),
       paymentId: null,
       orderId: null,
