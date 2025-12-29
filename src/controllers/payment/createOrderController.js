@@ -39,7 +39,7 @@ export const createRazorpayOrder = async (req, res) => {
 
     //OWNERSHIP CHECK (MUST BE HERE)
 
-    if (appointmentData.studentUid !== user.uid) {
+    if (appointmentData.studentId !== user.uid) {
       return res.status(403).json({
         success: false,
         message: "You are not allowed to pay for this appointment",
