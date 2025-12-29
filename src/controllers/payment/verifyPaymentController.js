@@ -60,15 +60,15 @@ export const verifyRazorpayPayment = async (req, res) => {
     /* --------------------------------------------------
        2. Resolve STUDENT (single source of truth)
     -------------------------------------------------- */
-    const studentUid = aptData.studentUid || aptData.studentId || null;
+const studentId = aptData.studentId || null;
     const studentEmail = aptData.studentEmail || null;
     let studentName = aptData.studentName || null;
 
-    if (!studentName && studentUid) {
+    if (!studentName && studentId) {
       try {
         const userSnap = await adminDb
           .collection("users")
-          .doc(studentUid)
+          .doc(studentId)
           .get();
 
         if (userSnap.exists) {
@@ -247,7 +247,7 @@ export const verifyRazorpayPayment = async (req, res) => {
         appointmentId,
         counsellorId: aptData.counsellorId,
         counsellorName,
-        userId: studentUid,
+        userId: studentId,
         userEmail: studentEmail,
         userName: studentName,
         amountRupees: Number(order.amount) / 100,
@@ -272,10 +272,10 @@ export const verifyRazorpayPayment = async (req, res) => {
       .doc(appointmentId)
       .set({ paymentStatus: "success", paymentDetails }, { merge: true });
 
-    if (studentUid) {
+    if (studentId) {
       await adminDb
         .collection("users")
-        .doc(studentUid)
+        .doc(studentId)
         .collection("appointments")
         .doc(appointmentId)
         .set({ paymentStatus: "success", paymentDetails }, { merge: true });
