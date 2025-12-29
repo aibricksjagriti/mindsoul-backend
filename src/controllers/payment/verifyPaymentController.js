@@ -386,9 +386,14 @@ export const verifyRazorpayPayment = async (req, res) => {
       });
     }
 
-    return res
-      .status(200)
-      .json({ success: true, message: "Payment verified and recorded" });
+    //FETCH UPDATED APPOINTMENT
+    const updatedSnap = await appointmentRef.get();
+
+    return res.status(200).json({
+      success: true,
+      message: "Payment verified and recorded",
+      appointment: updatedSnap.data(),
+    });
   } catch (err) {
     console.error("Verify Payment Error:", err);
     return res.status(500).json({
