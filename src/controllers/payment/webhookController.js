@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { db as adminDb } from "../../config/firebase.js";
+import admin from "firebase-admin";
 
 const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || "";
 
@@ -172,7 +173,14 @@ export const razorpayWebhook = async (req, res) => {
         .doc(aptData.counsellorId)
         .collection("appointments")
         .doc(appointmentId)
-        .set({ paymentStatus: "success" }, { merge: true });
+        .set(
+          {
+            paymentStatus: "success",
+            status: "scheduled",
+            updatedAt: new Date(),
+          },
+          { merge: true }
+        );
 
       if (aptData.studentId) {
         await adminDb
@@ -180,7 +188,14 @@ export const razorpayWebhook = async (req, res) => {
           .doc(aptData.studentId)
           .collection("appointments")
           .doc(appointmentId)
-          .set({ paymentStatus: "success" }, { merge: true });
+          .set(
+            {
+              paymentStatus: "success",
+              status: "scheduled",
+              updatedAt: new Date(),
+            },
+            { merge: true }
+          );
       }
 
       return res.status(200).send("OK");

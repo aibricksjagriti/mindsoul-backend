@@ -60,16 +60,13 @@ export const verifyRazorpayPayment = async (req, res) => {
     /* --------------------------------------------------
        2. Resolve STUDENT (single source of truth)
     -------------------------------------------------- */
-const studentId = aptData.studentId || null;
+    const studentId = aptData.studentId || null;
     const studentEmail = aptData.studentEmail || null;
     let studentName = aptData.studentName || null;
 
     if (!studentName && studentId) {
       try {
-        const userSnap = await adminDb
-          .collection("users")
-          .doc(studentId)
-          .get();
+        const userSnap = await adminDb.collection("users").doc(studentId).get();
 
         if (userSnap.exists) {
           const u = userSnap.data();
@@ -270,7 +267,15 @@ const studentId = aptData.studentId || null;
       .doc(aptData.counsellorId)
       .collection("appointments")
       .doc(appointmentId)
-      .set({ paymentStatus: "success", paymentDetails }, { merge: true });
+      .set(
+        {
+          paymentStatus: "success",
+          paymentDetails,
+          status: "scheduled",
+          updatedAt: new Date(),
+        },
+        { merge: true }
+      );
 
     if (studentId) {
       await adminDb
@@ -278,7 +283,15 @@ const studentId = aptData.studentId || null;
         .doc(studentId)
         .collection("appointments")
         .doc(appointmentId)
-        .set({ paymentStatus: "success", paymentDetails }, { merge: true });
+        .set(
+          {
+            paymentStatus: "success",
+            paymentDetails,
+            status: "scheduled",
+            updatedAt: new Date(),
+          },
+          { merge: true }
+        );
     }
 
     /* --------------------------------------------------
