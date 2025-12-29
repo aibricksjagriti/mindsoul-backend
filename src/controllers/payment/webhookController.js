@@ -5,7 +5,9 @@ const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || "";
 
 export const razorpayWebhook = async (req, res) => {
   try {
-    // 1. Verify webhook signature (AUTHENTICITY CHECK)
+    /* ============================================================
+      1  VERIFY WEBHOOK SIGNATURE (AUTHENTICITY CHECK)
+    ============================================================ */
 
     const payload = req.rawBody || req.body;
     const signature = req.headers["x-razorpay-signature"];
@@ -24,7 +26,9 @@ export const razorpayWebhook = async (req, res) => {
       return res.status(400).send("Invalid signature");
     }
 
-    //  2. Extract event & payment entity
+    /* ============================================================
+      2 EXTRACT EVENT + PAYMENT ENTITY
+    ============================================================ */
     const event = payload.event;
     const payment = payload.payload?.payment?.entity;
 
@@ -33,8 +37,10 @@ export const razorpayWebhook = async (req, res) => {
       return res.status(200).send("No payment entity");
     }
 
-    //3. Resolve appointmentId from Razorpay order.receipt(receipt format enforced during order creation)
-    // extract appointmentId by fetching the Razorpay order
+    /* ============================================================
+      3  RESOLVE appointmentId FROM ORDER.receipt
+           (receipt format enforced: receipt_<appointmentId>)
+    ============================================================ */
     let appointmentId = null;
 
     try {
@@ -56,7 +62,10 @@ export const razorpayWebhook = async (req, res) => {
       return res.status(200).send("OK");
     }
 
-    // 4. Fetch appointment (single source of truth)
+    /* ============================================================
+      4  FETCH APPOINTMENT (SOURCE OF TRUTH)
+    ============================================================ */
+
     const appointmentRef = adminDb
       .collection("appointments")
       .doc(appointmentId);
@@ -69,17 +78,24 @@ export const razorpayWebhook = async (req, res) => {
 
     const aptData = aptSnap.data();
 
-    // 5. Idempotency guard If already marked success → do nothing
+    const studentId = aptData.studentId || null;
+
+    /* ============================================================
+       5 IDEMPOTENCY GUARD
+    ============================================================ */
+
     if (aptData.paymentStatus === "success") {
       return res.status(200).send("OK");
     }
 
-    // 6. Handle PAYMENT CAPTURED event
+    /* ============================================================
+       6️ HANDLE PAYMENT CAPTURED
+    ============================================================ */
     if (event === "payment.captured") {
-      // new   compute paid amount in rupees from Razorpay (paise → rupees)
+      //compute paid amount in rupees from Razorpay (paise → rupees)
       const paidAmountRupees = Number(payment.amount) / 100;
 
-      // new   strict session price check (appointment.amount is rupees)
+      //strict session price check (appointment.amount is rupees)
       if (aptData.amount && Number(aptData.amount) !== paidAmountRupees) {
         console.error(
           "Webhook amount mismatch. Expected:",
@@ -90,9 +106,11 @@ export const razorpayWebhook = async (req, res) => {
         return res.status(200).send("PRICE_MISMATCH_IGNORED");
       }
 
-      //  6 Update appointment
+      /* ------------------------------------------------------------
+        7 UPDATE APPOINTMENT
+      ------------------------------------------------------------ */
 
-       await appointmentRef.update({
+      await appointmentRef.update({
         //Appointment state
         status: "scheduled",
         paymentStatus: "success",
@@ -111,7 +129,7 @@ export const razorpayWebhook = async (req, res) => {
           status: payment.status,
           method: payment.method || null,
           captured: true,
-          createdAt: new Date(),
+          createdAt: Date(),
           raw: {
             paymentId: payment.id,
             orderId: payment.order_id,
@@ -119,12 +137,13 @@ export const razorpayWebhook = async (req, res) => {
           },
         },
 
-        paidAt: new Date(),
-        updatedAt: new Date(),
+        paidAt: Date(),
+        updatedAt: Date(),
       });
 
-
-      //  6 Payments master collection (UPSERT) Ensures payment history parity
+      /* ============================================================
+         PAYMENTS MASTER 
+      ============================================================ */
 
       await adminDb
         .collection("payments")
@@ -135,20 +154,18 @@ export const razorpayWebhook = async (req, res) => {
             orderId: payment.order_id,
             appointmentId,
             counsellorId: aptData.counsellorId,
-            userId: aptData.studentUid || null,
+            userId: aptData.studentId || null,
             amountPaise: payment.amount,
             amountRupees: paidAmountRupees,
             currency: payment.currency,
             status: "success",
             method: payment.method || null,
             source: "razorpay-webhook",
-            updatedAt: new Date(),
+            updatedAt: Date(),
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           },
           { merge: true }
         );
-
-      //  6 Subcollection sync (dashboard parity)
 
       await adminDb
         .collection("counsellors")
@@ -157,10 +174,10 @@ export const razorpayWebhook = async (req, res) => {
         .doc(appointmentId)
         .set({ paymentStatus: "success" }, { merge: true });
 
-      if (aptData.studentUid) {
+      if (aptData.studentId) {
         await adminDb
           .collection("users")
-          .doc(aptData.studentUid)
+          .doc(aptData.studentId)
           .collection("appointments")
           .doc(appointmentId)
           .set({ paymentStatus: "success" }, { merge: true });
@@ -169,17 +186,21 @@ export const razorpayWebhook = async (req, res) => {
       return res.status(200).send("OK");
     }
 
-    // 7. Handle PAYMENT FAILED event
+    /* ============================================================
+       7️ HANDLE PAYMENT FAILED
+    ============================================================ */
 
     if (event === "payment.failed") {
-      // new   save failure info
+      //save failure info
       await appointmentRef.update({
         paymentStatus: "failed",
         "meta.status": "payment_failed",
-        updatedAt: new Date(),
+        updatedAt: Date(),
       });
 
-      //8. Ignore all other events safely
+      /* ============================================================
+       8️ IGNORE ALL OTHER EVENTS
+    ============================================================ */
 
       return res.status(200).send("OK");
     }
