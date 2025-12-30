@@ -159,6 +159,11 @@ export const createAppointment = async (req, res) => {
       paymentExpiresAt: admin.firestore.Timestamp.fromDate(
         new Date(Date.now() + 3 * 60 * 1000)
       ),
+      //appointment expiry 1 days
+      ttlDeleteAt: admin.firestore.Timestamp.fromDate(
+        new Date(Date.now() + 1 * 24 * 60 * 60 * 1000)
+      ),
+
       paymentId: null,
       orderId: null,
       signature: null,
