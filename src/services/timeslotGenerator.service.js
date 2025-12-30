@@ -120,7 +120,10 @@ export const generateSmartSlotsForDate = async (counsellorId, dateStr) => {
       date: dateStr,
       workingHours,
       slotDuration,
-      allowedSlotIds: new Set(missingSlots.map((s) => s.id)), 
+      allowedSlotIds:
+        existingSlots.length === 0
+          ? null
+          : new Set(missingSlots.map((s) => s.id)),
     });
 
     // ----------- LOG RESULT TO CLOUD RUN -----------
