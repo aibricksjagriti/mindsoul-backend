@@ -8,22 +8,29 @@ export const generateSlotsForDate = async ({
   date,
   workingHours,
   slotDuration,
+  allowedSlotIds = null,
 }) => {
   try {
     if (!counsellorId || !date || !workingHours || !slotDuration) {
       throw new Error("Missing required fields for slot generation");
     }
 
-    //DELETE EXISTING SLOTS FOR THIS COUNSELLOR + DATE
-    const existingSnap = await db
-      .collection("timeSlots")
-      .where("counsellorId", "==", counsellorId)
-      .where("date", "==", date)
-      .get();
+    //PRODUCTION SAFETY GUARD (PUT IT HERE)
+    if (!allowedSlotIds && process.env.NODE_ENV === "production") {
+      throw new Error("Full slot regeneration is disabled in production");
+    }
 
-    const deleteBatch = db.batch();
-    existingSnap.docs.forEach((doc) => deleteBatch.delete(doc.ref));
-    await deleteBatch.commit();
+    if (!allowedSlotIds) {
+      const existingSnap = await db
+        .collection("timeSlots")
+        .where("counsellorId", "==", counsellorId)
+        .where("date", "==", date)
+        .get();
+
+      const deleteBatch = db.batch();
+      existingSnap.docs.forEach((doc) => deleteBatch.delete(doc.ref));
+      await deleteBatch.commit();
+    }
 
     const expiresAt = admin.firestore.Timestamp.fromDate(
       new Date(`${date}T23:59:59`)
@@ -66,6 +73,12 @@ export const generateSlotsForDate = async ({
         ).padStart(2, "0")}`;
 
         const docId = `${counsellorId}_${date}_${period}_${startTime}`;
+
+
+        //generate ONLY allowed (missing) slots
+        if (allowedSlotIds && !allowedSlotIds.has(docId)) {
+          continue; // do not overwrite existing or booked slots
+        } 
 
         // DEBUG (keep this!)
         console.log("SLOT", { period, startTime, endTime });
