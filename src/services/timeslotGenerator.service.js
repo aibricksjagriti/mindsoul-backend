@@ -89,27 +89,27 @@ export const generateSmartSlotsForDate = async (counsellorId, dateStr) => {
     );
     const expectedIds = new Set(expectedSlots.map((s) => s.id));
 
-    // 7. Determine obsolete slots (existing but not expected)
-    const toDelete = existingSlots.filter((slot) => !expectedIds.has(slot.id));
+    //  7. Determine obsolete slots (existing but not expected)
+    // const toDelete = existingSlots.filter((slot) => !expectedIds.has(slot.id));
 
-    // 8. Delete unbooked obsolete slots → keep booked ones as conflicts
-    let deletedCount = 0;
-    let conflictList = [];
+    //  8. Delete unbooked obsolete slots → keep booked ones as conflicts
+    // let deletedCount = 0;
+    // let conflictList = [];
 
-    const batchDel = db.batch();
+    // const batchDel = db.batch();
 
-    for (const slot of toDelete) {
-      if (slot.isBooked) {
-        conflictList.push(slot);
-        continue;
-      }
+    // for (const slot of toDelete) {
+    //   if (slot.isBooked) {
+    //     conflictList.push(slot);
+    //     continue;
+    //   }
 
-      const ref = db.collection("timeSlots").doc(slot.id);
-      batchDel.delete(ref);
-      deletedCount++;
-    }
+    //   const ref = db.collection("timeSlots").doc(slot.id);
+    //   batchDel.delete(ref);
+    //   deletedCount++;
+    // }
 
-    await batchDel.commit();
+    // await batchDel.commit();
 
     //determine which slots are missing (not already in DB)
     const missingSlots = expectedSlots.filter((s) => !existingIds.has(s.id));
