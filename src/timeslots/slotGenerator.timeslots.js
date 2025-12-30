@@ -15,10 +15,12 @@ export const generateSlotsForDate = async ({
       throw new Error("Missing required fields for slot generation");
     }
 
-    //PRODUCTION SAFETY GUARD (PUT IT HERE)
+    /*
+    //PRODUCTION SAFETY GUARD (ADD THIS when no slot generation needed)
     if (!allowedSlotIds && process.env.NODE_ENV === "production") {
       throw new Error("Full slot regeneration is disabled in production");
-    }
+    } 
+      */
 
     if (!allowedSlotIds) {
       const existingSnap = await db
