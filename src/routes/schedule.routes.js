@@ -22,15 +22,15 @@ const router = express.Router();
  */
 
 // Get schedule (weekly + time config)
-router.get("/:counsellorId", authenticate, getScheduleInfo);
+router.get("/:counsellorId",  getScheduleInfo);
 
 // Update weekly schedule
-router.patch("/:counsellorId", authenticate, updateSchedule);
+router.patch("/:counsellorId",  updateSchedule);
 
 // Add or update date exception
-router.post("/:counsellorId/exception", authenticate, addDateException);
+router.post("/:counsellorId/exception",  addDateException);
 
 // Delete an exception for a specific date
-router.delete("/:counsellorId/exception/:date", authenticate, removeDateException);
+router.delete("/:counsellorId/exception/:date",  removeDateException);
 
 export default router;

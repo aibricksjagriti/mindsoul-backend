@@ -37,22 +37,20 @@ router.get("/counsellor/:id/booked"  getBookedSlots);
 
 //DELETE WHEN DONE TESTING
 // Get available grouped slots
-//GET /api/timeslots/counsellor/:id/slots?date=YYYY-MM-DD
 router.get("/counsellor/:id/slots", getAvailableSlots);
 
 
 // Get booked slots for a date
-//GET /api/timeslots/counsellor/:id/slots?date=YYYY-MM-DD
 router.get("/counsellor/:id/booked", getBookedSlots);
 
 
 //------------------ NEW SMART GENERATION ROUTES ------------------
 
 // Generate next 7 days using weekly schedule
-router.post("/counsellor/:id/generate-week", authenticate, generateNext7Days);
+router.post("/counsellor/:id/generate-week",  generateNext7Days);
 
 // Refresh a single date
-router.post("/counsellor/:id/refresh", authenticate, refreshDate);
+router.post("/counsellor/:id/refresh",  refreshDate);
 
 // Daily cron job (Cloud Scheduler)
 router.post("/counsellor/:id/cron-generate",cronAuth, cronGenerateNext7Days); // No auth, internal use
