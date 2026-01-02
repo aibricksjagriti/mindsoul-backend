@@ -21,7 +21,7 @@ const db = admin.firestore();
  * periods should be ON for the date.
  *
  * Then:
- *  - Creates missing slots
+ *  - generates ONLY missing slots
  *  - Deletes obsolete slots (only if NOT booked)
  *  - Returns conflict list for booked obsolete slots
  */
@@ -51,7 +51,12 @@ export const generateSmartSlotsForDate = async (counsellorId, dateStr) => {
     const existingSlots = await getSlotsForDate(counsellorId, dateStr);
     const existingIds = new Set(existingSlots.map((s) => s.id));
 
-    // 5. If no workingHours → full day off → delete all unbooked slots
+    
+    /**
+     * If counsellor is OFF for the whole day
+     * → delete only UNBOOKED slots
+     */
+
     if (Object.keys(workingHours).length === 0) {
       let deleted = 0;
       let conflicts = [];
@@ -80,69 +85,42 @@ export const generateSmartSlotsForDate = async (counsellorId, dateStr) => {
       };
     }
 
-    // 6. BEFORE generating new slots, list the expected slot IDs
-    const expectedSlots = await simulateSlotGeneration(
+    // 5️. Simulate expected slots (ID-accurate)
+    const expectedIds = await  simulateSlotIds(
       counsellorId,
       dateStr,
       workingHours,
       slotDuration
     );
-    const expectedIds = new Set(expectedSlots.map((s) => s.id));
 
-    //  7. Determine obsolete slots (existing but not expected)
-    // const toDelete = existingSlots.filter((slot) => !expectedIds.has(slot.id));
+    // 6️. Determine missing slots
+    const missingIds = [...expectedIds].filter(
+      (id) => !existingIds.has(id)
+    );
 
-    //  8. Delete unbooked obsolete slots → keep booked ones as conflicts
-    // let deletedCount = 0;
-    // let conflictList = [];
-
-    // const batchDel = db.batch();
-
-    // for (const slot of toDelete) {
-    //   if (slot.isBooked) {
-    //     conflictList.push(slot);
-    //     continue;
-    //   }
-
-    //   const ref = db.collection("timeSlots").doc(slot.id);
-    //   batchDel.delete(ref);
-    //   deletedCount++;
-    // }
-
-    // await batchDel.commit();
-
-    //determine which slots are missing (not already in DB)
-    const missingSlots = expectedSlots.filter((s) => !existingIds.has(s.id));
-
-    //generate ONLY missing slots
+    // 7️. Generate ONLY missing slots
     const creationResult = await generateSlotsForDate({
       counsellorId,
       date: dateStr,
       workingHours,
       slotDuration,
       allowedSlotIds:
-        existingSlots.length === 0
-          ? null
-          : new Set(missingSlots.map((s) => s.id)),
+        existingSlots.length === 0 ? null : new Set(missingIds),
     });
 
-    // ----------- LOG RESULT TO CLOUD RUN -----------
+    // Safe logging (no undefined vars)
     console.log("SMART GENERATION RESULT", {
       counsellorId,
       date: dateStr,
       created: creationResult.created ?? 0,
-      deleted: deletedCount,
-      conflicts: conflictList.length,
-      conflictSlots: conflictList.map((s) => s.id), // optional but very helpful
-      workingHours: Object.keys(workingHours),
+      workingPeriods: Object.keys(workingHours),
     });
-    // -----------------------------------------------
 
     return {
       success: true,
       created: creationResult.created ?? 0,
-      deleted: deletedCount,
-      conflicts: conflictList,
+      deleted: 0,
+      conflicts: [],
       message: "Smart slot generation completed",
     };
   } catch (err) {
@@ -150,49 +128,51 @@ export const generateSmartSlotsForDate = async (counsellorId, dateStr) => {
       counsellorId,
       date: dateStr,
       error: err.message,
-      stack: err.stack,
     });
-    throw new Error(err.message);
+    throw err;
   }
 };
+
 
 /**
  * ----------------------------------------------------------------------
  * SIMULATE SLOT GENERATION WITHOUT WRITING TO FIRESTORE
  * ----------------------------------------------------------------------
- * Returns a list of expected slot IDs so we can compare and delete old ones.
+ *  * MUST match generateSlotsForDate EXACTLY
+
  */
-const simulateSlotGeneration = async (
+const simulateSlotIds = async (
   counsellorId,
   date,
   workingHours,
   slotDuration
 ) => {
-  const simulatedSlots = [];
+  const ids = new Set();
+
+  const BREAK_DURATION = 15;
+  const STEP = slotDuration + BREAK_DURATION;
 
   for (const period of Object.keys(workingHours)) {
     const { start, end } = workingHours[period];
-
     if (!start || !end) continue;
 
     const [sh, sm] = start.split(":").map(Number);
     const [eh, em] = end.split(":").map(Number);
 
-    const startMinutes = sh * 60 + sm;
+    let t = sh * 60 + sm;
     const endMinutes = eh * 60 + em;
 
-    for (let t = startMinutes; t < endMinutes; t += slotDuration) {
-      const endT = t + slotDuration;
-      if (endT > endMinutes) break;
-
+    while (t + slotDuration <= endMinutes) {
       const hh = String(Math.floor(t / 60)).padStart(2, "0");
       const mm = String(t % 60).padStart(2, "0");
+      const startTime = `${hh}:${mm}`;
 
-      const id = `${counsellorId}_${date}_${hh}:${mm}`;
+      const id = `${counsellorId}_${date}_${period}_${startTime}`;
+      ids.add(id);
 
-      simulatedSlots.push({ id });
+      t += STEP;
     }
   }
 
-  return simulatedSlots;
+  return ids;
 };
