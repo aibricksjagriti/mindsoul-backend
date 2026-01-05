@@ -2,15 +2,16 @@ import express from "express";
   import { filterCounsellors, getAllCounsellors, getAllCounsellorsById, getCounsellorAppointments, sendOtp, updateProfile, verifyOtp } from "../controllers/counsellor.controllers.js";
 import { upload } from "../middlewares/uploadImages.js";
 import { authenticate } from "../middlewares/auth.middlewares.js";
+import { otpRateLimiter } from "../middlewares/rateLimiter.middlewares.js";
 
 
 const router = express.Router();
 
 
 //endpoint
-router.post("/send-otp", sendOtp);
+router.post("/send-otp", otpRateLimiter,  sendOtp);
 
-router.post("/verify-otp", verifyOtp);
+router.post("/verify-otp",otpRateLimiter,  verifyOtp);
 
 router.post("/update-profile", authenticate, upload.single("profileImage"),  updateProfile);  
 
