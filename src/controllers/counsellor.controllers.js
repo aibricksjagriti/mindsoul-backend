@@ -108,7 +108,6 @@ export const sendOtp = async (req, res) => {
   }
 };
 
-
 export const verifyOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -365,32 +364,35 @@ export const updateProfile = async (req, res) => {
     }
 
     //Default schedulePreferences should match workingHours periods only
-if (!counsellorData.schedulePreferences) {
+    if (!counsellorData.schedulePreferences) {
+      // Use the incoming workingHours from profileData FIRST
+      const wh =
+        profileData.workingHours || counsellorData.profileData?.workingHours;
 
-  // Use the incoming workingHours from profileData FIRST
-  const wh = profileData.workingHours || counsellorData.profileData?.workingHours;
+      const hasMorning = wh?.morning ? true : false;
+      const hasAfternoon = wh?.afternoon ? true : false;
+      const hasEvening = wh?.evening ? true : false;
 
-  const hasMorning = wh?.morning ? true : false;
-  const hasAfternoon = wh?.afternoon ? true : false;
-  const hasEvening = wh?.evening ? true : false;
+      const defaultDay = {
+        morning: hasMorning,
+        afternoon: hasAfternoon,
+        evening: hasEvening,
+      };
 
-  const defaultDay = {
-    morning: hasMorning,
-    afternoon: hasAfternoon,
-    evening: hasEvening,
-  };
+      profileData.schedulePreferences = {
+        Monday: { ...defaultDay },
+        Tuesday: { ...defaultDay },
+        Wednesday: { ...defaultDay },
+        Thursday: { ...defaultDay },
+        Friday: { ...defaultDay },
+        Saturday: { ...defaultDay },
+        Sunday: { ...defaultDay },
+      };
+    }
 
-  profileData.schedulePreferences = {
-    Monday:    { ...defaultDay },
-    Tuesday:   { ...defaultDay },
-    Wednesday: { ...defaultDay },
-    Thursday:  { ...defaultDay },
-    Friday:    { ...defaultDay },
-    Saturday:  { ...defaultDay },
-    Sunday:    { ...defaultDay }
-  };
-}
-
+    if (!counsellorData.scheduleExceptions) {
+      profileData.scheduleExceptions = {};
+    }
 
     // ------------------ FINAL FIRESTORE UPDATE -----------------
     const updatePayload = {
