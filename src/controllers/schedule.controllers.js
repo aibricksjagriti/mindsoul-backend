@@ -195,8 +195,8 @@ export const addDateException = async (req, res) => {
     return res.json({
       success: true,
       message: hasBookings
-        ? "Date exception saved. Existing appointments are preserved."
-        : "Date exception saved",
+        ? "Date exception saved and applied. Existing appointments are preserved."
+        : "Date exception saved and applied",
     });
   } catch (err) {
     console.error("Add exception error:", err);
