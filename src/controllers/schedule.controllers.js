@@ -7,6 +7,7 @@ import {
   deleteDateException,
   getCounsellorTimeConfig,
 } from "../services/schedule.service.js";
+import { generateSmartSlotsForDate } from "../services/timeslotGenerator.service.js";
 
 /**
  * ---------------------------------------------------------
@@ -180,6 +181,16 @@ export const addDateException = async (req, res) => {
       },
       { merge: true }
     );
+    /**
+     * ---------------------------------------------------------
+     * APPLY exception immediately for this date
+     * ---------------------------------------------------------
+     * This will:
+     * - delete unbooked slots if day is off
+     * - keep booked slots intact
+     * - NOT touch other dates
+     */
+    await generateSmartSlotsForDate(counsellorId, date);
 
     return res.json({
       success: true,
@@ -187,7 +198,6 @@ export const addDateException = async (req, res) => {
         ? "Date exception saved. Existing appointments are preserved."
         : "Date exception saved",
     });
-
   } catch (err) {
     console.error("Add exception error:", err);
     return res.status(500).json({
