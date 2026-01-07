@@ -335,12 +335,24 @@ export const updateProfile = async (req, res) => {
       profileData.languages = toArray(languages).map((s) => s.trim());
     }
 
-    // Session Price
+    // Session Price (APPLY 20% PLATFORM FEE HERE)
     if (typeof sessionPrice !== "undefined") {
-      const parsed = Number(sessionPrice);
-      profileData.sessionPrice = Number.isFinite(parsed)
-        ? parsed
-        : sessionPrice; // fallback to string if not numeric
+      const basePrice = Number(sessionPrice);
+
+      if (!Number.isFinite(basePrice) || basePrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "sessionPrice must be a valid positive number",
+        });
+      }
+
+      const platformFee = Math.round(basePrice * 0.2);
+      const finalPrice = basePrice + platformFee;
+
+      // store both (recommended)
+      profileData.basePrice = basePrice; // counsellor-entered
+      profileData.platformFee = platformFee; // 20%
+      profileData.sessionPrice = finalPrice; // FINAL payable amount
     }
 
     // ------------------ NEW: focusAreas -------------------------
