@@ -44,7 +44,7 @@ router.get("/counsellor/:id/booked", getBookedSlots);
 router.post("/counsellor/:id/generate-week", authenticate, generateNext7Days);
 
 // Refresh slots for a specific date
-router.post("/counsellor/:id/refresh", authenticate, refreshDate);
+router.post("/counsellor/:id/refresh", refreshDate);
 
 /**
  * INTERNAL (Cloud Scheduler only)
