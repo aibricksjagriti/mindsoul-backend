@@ -23,9 +23,7 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   "https://mindsoul-wellness.vercel.app",
-
-  // local payment testing (delete later)
-    "http://localhost:5173", 
+  "https://www.themindsoul.com", 
   "http://localhost:3000",
 ];
 
