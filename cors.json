@@ -1,6 +1,6 @@
 [
   {
-    "origin": ["http://localhost:5173","https://www.themindsoul.com", "https://mindsoul-wellness.vercel.app"],
+    "origin": ["http://localhost:5173","https://www.themindsoul.com", "https://mindsoul-wellness.vercel.app", "https://themindsoul.vercel.app"],
     "responseHeader": ["Content-Type", "Authorization"],
     "method": ["GET", "HEAD", "OPTIONS"],
     "maxAgeSeconds": 3600
