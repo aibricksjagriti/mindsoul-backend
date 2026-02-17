@@ -66,7 +66,7 @@ app.use((req, res, next) => {
 
 
 
-app.use(bodyParser.json({
+app.use(express.json({
   verify: (req, res, buf) => {
     req.rawBody = buf.toString();
   }
@@ -74,7 +74,6 @@ app.use(bodyParser.json({
 
 
 //middlewares
-app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
