@@ -10,7 +10,7 @@ export const razorpayWebhook = async (req, res) => {
       1  VERIFY WEBHOOK SIGNATURE (AUTHENTICITY CHECK)
     ============================================================ */
 
-    const payload = req.rawBody || req.body;
+    const rawBody = req.rawBody;
     const signature = req.headers["x-razorpay-signature"];
 
     if (!signature) {
@@ -19,13 +19,15 @@ export const razorpayWebhook = async (req, res) => {
 
     const expected = crypto
       .createHmac("sha256", WEBHOOK_SECRET)
-      .update(JSON.stringify(payload))
+      .update(rawBody)
       .digest("hex");
 
     if (expected !== signature) {
       console.error("Webhook signature mismatch");
       return res.status(400).send("Invalid signature");
     }
+
+    const payload = JSON.parse(rawBody);
 
     /* ============================================================
       2 EXTRACT EVENT + PAYMENT ENTITY
@@ -102,7 +104,7 @@ export const razorpayWebhook = async (req, res) => {
           "Webhook amount mismatch. Expected:",
           aptData.amount,
           "got:",
-          paidAmountRupees
+          paidAmountRupees,
         );
         return res.status(200).send("PRICE_MISMATCH_IGNORED");
       }
@@ -165,7 +167,7 @@ export const razorpayWebhook = async (req, res) => {
             updatedAt: Date(),
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           },
-          { merge: true }
+          { merge: true },
         );
 
       await adminDb
@@ -179,7 +181,7 @@ export const razorpayWebhook = async (req, res) => {
             status: "scheduled",
             updatedAt: new Date(),
           },
-          { merge: true }
+          { merge: true },
         );
 
       if (aptData.studentId) {
@@ -194,7 +196,7 @@ export const razorpayWebhook = async (req, res) => {
               status: "scheduled",
               updatedAt: new Date(),
             },
-            { merge: true }
+            { merge: true },
           );
       }
 
