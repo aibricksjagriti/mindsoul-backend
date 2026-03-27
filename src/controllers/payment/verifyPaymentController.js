@@ -153,7 +153,7 @@ export const verifyRazorpayPayment = async (req, res) => {
        7. Fetch Razorpay order & payment
     -------------------------------------------------- */
     const order = await razorpay.orders.fetch(razorpay_order_id);
-    const payment = await razorpay.payments.fetch(razorpay_payment_id);
+    let payment = await razorpay.payments.fetch(razorpay_payment_id);
 
     if (payment.order_id !== razorpay_order_id) {
       return res

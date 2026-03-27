@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { db as adminDb } from "../../config/firebase.js";
 import admin from "firebase-admin";
+import { razorpay } from "../../services/razorpayClient.js";
 
 const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || "";
 
@@ -132,7 +133,7 @@ export const razorpayWebhook = async (req, res) => {
           status: payment.status,
           method: payment.method || null,
           captured: true,
-          createdAt: Date(),
+          createdAt: new Date(),
           raw: {
             paymentId: payment.id,
             orderId: payment.order_id,
@@ -140,8 +141,8 @@ export const razorpayWebhook = async (req, res) => {
           },
         },
 
-        paidAt: Date(),
-        updatedAt: Date(),
+        paidAt: new Date(),
+        updatedAt: new Date(),
       });
 
       /* ============================================================
@@ -164,7 +165,7 @@ export const razorpayWebhook = async (req, res) => {
             status: "success",
             method: payment.method || null,
             source: "razorpay-webhook",
-            updatedAt: Date(),
+            updatedAt: new Date(),
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
           },
           { merge: true },
@@ -212,7 +213,7 @@ export const razorpayWebhook = async (req, res) => {
       await appointmentRef.update({
         paymentStatus: "failed",
         "meta.status": "payment_failed",
-        updatedAt: Date(),
+        updatedAt: new Date(),
       });
 
       /* ============================================================
