@@ -106,4 +106,29 @@ app.get("/", (req, res)=> {
   res.send("Hello from Mindsoul Backend");
 })
 
+// Catch-all 404 → forward to error handler
+app.use((req, res, next) => {
+  const error = new Error("API endpoint not found");
+  error.statusCode = 404;
+  next(error);
+});
+
+// GLOBAL ERROR HANDLER
+app.use((err, req, res, next) => {
+  console.error("ERROR:", {
+    message: err.message,
+    stack: err.stack,
+    path: req.originalUrl,
+    method: req.method,
+  });
+
+  res.status(err.statusCode || 500).json({
+    success: false,
+    message:
+      process.env.NODE_ENV === "production"
+        ? "Internal Server Error"
+        : err.message,
+  });
+});
+
 export default app;
