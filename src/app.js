@@ -1,7 +1,7 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import bodyParser from "body-parser";
+import helmet from "helmet";
 
 import authRoutes from "./routes/auth.routes.js";
 import counsellorRoutes from "./routes/counsellor.routes.js";
@@ -18,6 +18,14 @@ import adminRoutes from "./routes/admin.routes.js";
 
 //app config
 const app = express();
+
+// Secure API with safer Helmet headers
+app.use(
+  helmet({
+    contentSecurityPolicy: false, 
+    crossOriginEmbedderPolicy: false,
+  })
+);
 
 // Allowed frontend domains
 const allowedOrigins = [
