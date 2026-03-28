@@ -22,7 +22,7 @@ router.get("/history/user", authenticate, getUserPayments);
 router.get("/history/counsellor", authenticate, getCounsellorPayments);
 
 //verify payment
-router.post("/verify-payment", paymentRateLimiter, verifyRazorpayPayment);
+router.post("/verify-payment", verifyRazorpayPayment);
 
 //razorpay webhook
 router.post("/webhook", razorpayWebhook);
