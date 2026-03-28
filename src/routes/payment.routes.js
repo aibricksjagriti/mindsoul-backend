@@ -8,10 +8,11 @@ import {
   getCounsellorPayments,
   getUserPayments,
 } from "../controllers/payment/paymentHistoryController.js";
+import { paymentRateLimiter } from "../middlewares/rateLimiter.middlewares.js";
 
 const router = express.Router();
 
-router.post("/create-order", authenticate, createRazorpayOrder);
+router.post("/create-order", authenticate, paymentRateLimiter, createRazorpayOrder);
 // router.post("/create-order", createRazorpayOrder_Test);
 
 // user payment history
@@ -21,7 +22,7 @@ router.get("/history/user", authenticate, getUserPayments);
 router.get("/history/counsellor", authenticate, getCounsellorPayments);
 
 //verify payment
-router.post("/verify-payment", verifyRazorpayPayment);
+router.post("/verify-payment", paymentRateLimiter, verifyRazorpayPayment);
 
 //razorpay webhook
 router.post("/webhook", razorpayWebhook);
