@@ -3,6 +3,12 @@ import { db as adminDb } from "../../config/firebase.js";
 import admin from "firebase-admin";
 import { razorpay } from "../../services/razorpayClient.js";
 
+import { emailClient, sendEmail } from "../../services/emailService.js";
+import { userPaymentReceiptTemplate } from "../../utils/userPaymentReceiptTemplate.js";
+import { counsellorPaymentReceiptTemplate } from "../../utils/counsellorPaymentReceiptTemplate.js";
+import { appointmentConfirmationTemplate } from "../../utils/appointmentConfirmation.js";
+import { counsellorNotificationTemplate } from "../../utils/counsellorNotification.js";
+
 const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || "";
 
 export const razorpayWebhook = async (req, res) => {
@@ -119,6 +125,9 @@ export const razorpayWebhook = async (req, res) => {
         status: "scheduled",
         paymentStatus: "success",
 
+        //clear expiry timing
+        paymentExpiresAt: null,
+
         //Top-level payment fields
         orderId: payment.order_id,
         paymentId: payment.id,
@@ -149,6 +158,10 @@ export const razorpayWebhook = async (req, res) => {
          PAYMENTS MASTER 
       ============================================================ */
 
+      const counsellorProfile = aptData.counsellorProfileSnapshot || {};
+      const webhookCounsellorName =
+        `${counsellorProfile.firstName || ""} ${counsellorProfile.lastName || ""}`.trim() || null;
+
       await adminDb
         .collection("payments")
         .doc(payment.id)
@@ -158,12 +171,17 @@ export const razorpayWebhook = async (req, res) => {
             orderId: payment.order_id,
             appointmentId,
             counsellorId: aptData.counsellorId,
+            counsellorName: webhookCounsellorName,
             userId: aptData.studentId || null,
+            userEmail: aptData.studentEmail || null,
+            userName: aptData.studentName || null,
             amountPaise: payment.amount,
             amountRupees: paidAmountRupees,
             currency: payment.currency,
             status: "success",
             method: payment.method || null,
+            appointmentDate: aptData.date || null,
+            timeSlot: aptData.timeSlot || null,
             source: "razorpay-webhook",
             updatedAt: new Date(),
             createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -201,11 +219,116 @@ export const razorpayWebhook = async (req, res) => {
           );
       }
 
+      // SEND EMAILS
+      try {
+        let studentName = aptData.studentName || null;
+        if (!studentName && aptData.studentId) {
+          const userSnap = await adminDb.collection("users").doc(aptData.studentId).get();
+          if (userSnap.exists) {
+            const u = userSnap.data();
+            studentName = u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || null;
+          }
+        }
+        
+        const userNameForMail = studentName || aptData.studentEmail || "User";
+        let counsellorName = webhookCounsellorName || "Counsellor";
+
+        // User appointment email
+        if (aptData.studentEmail) {
+          const userHtml = appointmentConfirmationTemplate({
+            studentName: userNameForMail,
+            counsellorName: counsellorName,
+            date: aptData.date,
+            timeSlot: aptData.timeSlot,
+            zoomLink: aptData.zoomLink,
+          });
+
+          await emailClient.sendMail({
+            from: `MINDSOUL <${process.env.MAIL_USER}>`,
+            to: aptData.studentEmail,
+            subject: "Hello User, Your Counselling Appointment is Confirmed",
+            html: userHtml,
+          });
+
+          await sendEmail({
+            to: aptData.studentEmail,
+            subject: "Payment Receipt – MINDSOUL",
+            html: userPaymentReceiptTemplate({
+              studentName: userNameForMail,
+              paymentId: payment.id,
+              orderId: payment.order_id,
+              amount: paidAmountRupees.toFixed(2),
+              date: new Date().toLocaleString(),
+            }),
+          });
+        }
+
+        // Counsellor appointment email
+        let counsellorEmail = aptData.counsellorEmail || null;
+        if (!counsellorEmail && aptData.counsellorId) {
+          const cSnap = await adminDb.collection("counsellors").doc(aptData.counsellorId).get();
+          if (cSnap.exists) {
+            counsellorEmail = cSnap.data()?.email || null;
+            if (!counsellorName || counsellorName === "Counsellor") {
+                const c = cSnap.data();
+                counsellorName = `${c.profileData?.firstName || ""} ${c.profileData?.lastName || ""}`.trim() || "Counsellor";
+            }
+          }
+        }
+
+        if (counsellorEmail) {
+          const counsellorHtml = counsellorNotificationTemplate({
+            counsellorName: counsellorName,
+            studentName: userNameForMail,
+            studentEmail: aptData.studentEmail,
+            date: aptData.date,
+            timeSlot: aptData.timeSlot,
+            startUrl: aptData.zoomLink,
+          });
+
+          await emailClient.sendMail({
+            from: `MINDSOUL <${process.env.MAIL_USER}>`,
+            to: counsellorEmail,
+            subject: "Hello Counsellor, You have a new appointment",
+            html: counsellorHtml,
+          });
+
+          await sendEmail({
+            to: counsellorEmail,
+            subject: "Payment Processed – MINDSOUL",
+            html: counsellorPaymentReceiptTemplate({
+              counsellorName: counsellorName,
+              studentName: userNameForMail,
+              paymentId: payment.id,
+              orderId: payment.order_id,
+              amount: paidAmountRupees.toFixed(2),
+              date: new Date().toLocaleString(),
+            }),
+          });
+        }
+      } catch (emailErr) {
+        console.error("Webhook Email sending failed:", emailErr);
+      }
+
       return res.status(200).send("OK");
     }
 
     /* ============================================================
-       7️ HANDLE PAYMENT FAILED
+       7️ HANDLE PAYMENT AUTHORIZED (AUTO-CAPTURE FALLBACK)
+    ============================================================ */
+
+    if (event === "payment.authorized") {
+      try {
+        await razorpay.payments.capture(payment.id, payment.amount);
+        console.log(`Payment ${payment.id} explicitly captured by webhook`);
+      } catch (err) {
+        console.error("Failed to explicit capture payment in webhook:", err, payment.id);
+      }
+      return res.status(200).send("OK");
+    }
+
+    /* ============================================================
+       8️ HANDLE PAYMENT FAILED
     ============================================================ */
 
     if (event === "payment.failed") {

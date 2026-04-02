@@ -84,6 +84,7 @@ export const createRazorpayOrder = async (req, res) => {
       amount: Math.round(amount * 100),
       currency,
       receipt: `receipt_${appointmentId}`,
+      payment_capture: 1,
 
       // ADD metadata
       notes: {
