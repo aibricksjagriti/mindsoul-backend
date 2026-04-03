@@ -74,11 +74,18 @@ app.use((req, res, next) => {
 
 
 
-app.use(express.json({
-  verify: (req, res, buf) => {
-    req.rawBody = buf.toString();
-  }
-}));
+// 1. Webhook-specific parser MUST come first
+app.use(
+  "/api/payment/webhook",
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf; // Keep buffer for exact cryptographic match
+    },
+  })
+);
+
+// 2. Standard parser for all other routes
+app.use(express.json());
 
 
 //middlewares

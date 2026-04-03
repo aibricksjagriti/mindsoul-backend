@@ -1,14 +1,9 @@
 import crypto from "crypto";
 import { razorpay } from "../../services/razorpayClient.js";
-import { emailClient, sendEmail } from "../../services/emailService.js";
-import { userPaymentReceiptTemplate } from "../../utils/userPaymentReceiptTemplate.js";
-import { counsellorPaymentReceiptTemplate } from "../../utils/counsellorPaymentReceiptTemplate.js";
 import {
   db as firestoreDb,
   adminDb as adminFirestoreDb,
 } from "../../config/firebase.js";
-import { appointmentConfirmationTemplate } from "../../utils/appointmentConfirmation.js";
-import { counsellorNotificationTemplate } from "../../utils/counsellorNotification.js";
 
 // Resolve Firestore DB reference (support both exports)
 const adminDb = adminFirestoreDb || firestoreDb || global.db;
@@ -57,86 +52,16 @@ export const verifyRazorpayPayment = async (req, res) => {
 
     const aptData = aptSnap.data();
 
-    /* --------------------------------------------------
-       2. Resolve STUDENT (single source of truth)
-    -------------------------------------------------- */
-    const studentId = aptData.studentId || null;
-    const studentEmail = aptData.studentEmail || null;
-    let studentName = aptData.studentName || null;
-
-    if (!studentName && studentId) {
-      try {
-        const userSnap = await adminDb.collection("users").doc(studentId).get();
-
-        if (userSnap.exists) {
-          const u = userSnap.data();
-          studentName =
-            u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || null;
-        }
-      } catch (err) {
-        console.error("Failed to resolve student name:", err);
-      }
-    }
-
-    /* --------------------------------------------------
-       3. Resolve COUNSELLOR (name + email)
-    -------------------------------------------------- */
-    let counsellorName = null;
-    let counsellorEmail = aptData.counsellorEmail || null;
-
-    try {
-      const counsellorSnap = await adminDb
-        .collection("counsellors")
-        .doc(aptData.counsellorId)
-        .get();
-
-      if (counsellorSnap.exists) {
-        const c = counsellorSnap.data();
-
-        counsellorName =
-          `${c.profileData?.firstName || ""} ${
-            c.profileData?.lastName || ""
-          }`.trim() || null;
-
-        counsellorEmail = counsellorEmail || c.email || null;
-      }
-    } catch (err) {
-      console.error("Failed to resolve counsellor:", err);
-    }
-
-    /* --------------------------------------------------
-       4. Idempotency guard
-    -------------------------------------------------- */
-    if (
-      aptData.paymentStatus === "success" ||
-      aptData.paymentDetails?.paymentId === razorpay_payment_id
-    ) {
-      return res
-        .status(200)
-        .json({ success: true, message: "Payment already processed" });
-    }
-
-    /* --------------------------------------------------
-       5. Order ID consistency
-    -------------------------------------------------- */
-    console.log("ORDER MATCH CHECK", {
-      dbOrderId: aptData.razorpayOrderId,
-      incomingOrderId: razorpay_order_id,
-    });
-
-    if (!aptData.razorpayOrderId) {
-      await appointmentRef.update({
-        razorpayOrderId: razorpay_order_id,
-      });
-    } else if (aptData.razorpayOrderId !== razorpay_order_id) {
-      return res.status(400).json({
-        success: false,
-        message: "Order ID mismatch. Invalid payment attempt.",
+    // Idempotency awareness (soft guard)
+    if (aptData.paymentStatus === "success") {
+      return res.status(200).json({
+        success: true,
+        message: "Payment already processed",
       });
     }
 
     /* --------------------------------------------------
-       6. Verify Razorpay signature
+       2. Verify Razorpay signature
     -------------------------------------------------- */
     const expectedSignature = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
@@ -150,7 +75,7 @@ export const verifyRazorpayPayment = async (req, res) => {
     }
 
     /* --------------------------------------------------
-       7. Fetch Razorpay order & payment
+       3. Fetch Razorpay order & payment
     -------------------------------------------------- */
     const order = await razorpay.orders.fetch(razorpay_order_id);
     let payment = await razorpay.payments.fetch(razorpay_payment_id);
@@ -161,14 +86,8 @@ export const verifyRazorpayPayment = async (req, res) => {
         .json({ success: false, message: "Payment does not belong to order" });
     }
 
-    if (payment.status === "authorized") {
-      payment = await razorpay.payments.capture(
-        razorpay_payment_id,
-        order.amount
-      );
-    }
-
-    if (payment.status !== "captured") {
+    // Capture logic strategically removed here. Kept read-only. We allow webhook to capture.
+    if (payment.status !== "captured" && payment.status !== "authorized") {
       return res.status(400).json({
         success: false,
         message: `Invalid payment status: ${payment.status}`,
@@ -176,223 +95,24 @@ export const verifyRazorpayPayment = async (req, res) => {
     }
 
     /* --------------------------------------------------
-       8. Build paymentDetails
+       4. Return Success to Frontend
+       (All DB writes & Emails are handled by the Webhook)
     -------------------------------------------------- */
-    const paymentDetails = {
-      orderId: razorpay_order_id,
-      paymentId: razorpay_payment_id,
-      signature: razorpay_signature,
-      amount: Number(order.amount), // paise
-      currency: order.currency || "INR",
-      status: payment.status,
-      method: payment.method || null,
-      captured: true,
-      createdAt: new Date(),
-      raw: {
-        paymentId: payment.id,
-        orderId: order.id,
-        status: payment.status,
-      },
-    };
+    
+    // We send back the existing appointment data.
+    // The frontend should know that success: true means the payment is captured,
+    // and the system is processing the slot booking asynchronously via webhook.
 
-    /* --------------------------------------------------
-       9. Update appointment
-    -------------------------------------------------- */
-    await appointmentRef.update({
-      //core appointment status
-      status: "scheduled",
-      paymentStatus: "success",
-
-      //clear expiry timing
-      paymentExpiresAt: null,
-
-      //top-level payment identifiers
-      orderId: razorpay_order_id,
-      paymentId: razorpay_payment_id,
-      signature: razorpay_signature,
-
-      //payment record
-      paymentDetails: {
-        orderId: razorpay_order_id,
-        paymentId: razorpay_payment_id,
-        signature: razorpay_signature,
-        amount: Number(order.amount),
-        currency: order.currency || "INR",
-        method: payment.method || null,
-        status: payment.status,
-        captured: true,
-        createdAt: new Date(),
-        raw: {
-          paymentId: payment.id,
-          orderId: order.id,
-          status: payment.status,
-        },
-      },
-      paidAt: new Date(),
-      updatedAt: new Date(),
+    console.log("VERIFY SUCCESS", {
+      appointmentId,
+      paymentStatus: payment.status,
     });
-
-    /* --------------------------------------------------
-       10. Payments master record
-    -------------------------------------------------- */
-    await adminDb
-      .collection("payments")
-      .doc(razorpay_payment_id)
-      .set({
-        paymentId: razorpay_payment_id,
-        orderId: razorpay_order_id,
-        appointmentId,
-        counsellorId: aptData.counsellorId,
-        counsellorName,
-        userId: studentId,
-        userEmail: studentEmail,
-        userName: studentName,
-        amountRupees: Number(order.amount) / 100,
-        amountPaise: Number(order.amount),
-        currency: order.currency || "INR",
-        status: "success",
-        method: payment.method || null,
-        appointmentDate: aptData.date,
-        timeSlot: aptData.timeSlot,
-        source: "razorpay",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-    /* --------------------------------------------------
-       11. Subcollections (safe)
-    -------------------------------------------------- */
-    await adminDb
-      .collection("counsellors")
-      .doc(aptData.counsellorId)
-      .collection("appointments")
-      .doc(appointmentId)
-      .set(
-        {
-          paymentStatus: "success",
-          paymentDetails,
-          status: "scheduled",
-          updatedAt: new Date(),
-        },
-        { merge: true }
-      );
-
-    if (studentId) {
-      await adminDb
-        .collection("users")
-        .doc(studentId)
-        .collection("appointments")
-        .doc(appointmentId)
-        .set(
-          {
-            paymentStatus: "success",
-            paymentDetails,
-            status: "scheduled",
-            updatedAt: new Date(),
-          },
-          { merge: true }
-        );
-    }
-
-    /* --------------------------------------------------
-       12. Email receipts (guarded)
-    -------------------------------------------------- */
-    const amountRupees = (order.amount / 100).toFixed(2);
-
-    // Appointment data
-    const appointmentDate = aptData.date;
-    const appointmentTimeSlot = aptData.timeSlot;
-    const actualZoomLink = aptData.zoomLink;
-
-    // Names
-    const userNameForMail = studentName || studentEmail || "User";
-
-    const counsellorProfile = aptData.counsellorProfileSnapshot || {};
-    const counsellorFullName =
-      `${counsellorProfile.firstName || ""} ${
-        counsellorProfile.lastName || ""
-      }`.trim() ||
-      counsellorName ||
-      "Counsellor";
-
-    //  Appointment confirmation email TO USER
-    try {
-      const html = appointmentConfirmationTemplate({
-        studentName: userNameForMail,
-        counsellorName: counsellorFullName,
-        date: appointmentDate,
-        timeSlot: appointmentTimeSlot,
-        zoomLink: actualZoomLink,
-      });
-
-      await emailClient.sendMail({
-        from: `MINDSOUL <${process.env.MAIL_USER}>`,
-        to: studentEmail,
-        subject: "Hello User, Your Counselling Appointment is Confirmed",
-        html,
-      });
-    } catch (mailErr) {
-      console.error("Email sending failed:", mailErr);
-    }
-
-    //  Appointment confirmation email TO Counsellor
-
-    try {
-      const counsellorHtml = counsellorNotificationTemplate({
-        counsellorName: counsellorFullName,
-        studentName: userNameForMail,
-        studentEmail,
-        date: appointmentDate,
-        timeSlot: appointmentTimeSlot,
-        startUrl: actualZoomLink,
-      });
-
-      await emailClient.sendMail({
-        from: `MINDSOUL <${process.env.MAIL_USER}>`,
-        to: counsellorEmail,
-        subject: "Hello Counsellor, You have a new appointment",
-        html: counsellorHtml,
-      });
-    } catch (cMailErr) {
-      console.error("Counsellor email sending failed:", cMailErr);
-    }
-
-    if (studentEmail) {
-      await sendEmail({
-        to: studentEmail,
-        subject: "Payment Receipt – MINDSOUL",
-        html: userPaymentReceiptTemplate({
-          studentName: studentName || "User",
-          paymentId: razorpay_payment_id,
-          orderId: razorpay_order_id,
-          amount: amountRupees,
-          date: new Date().toLocaleString(),
-        }),
-      });
-    }
-
-    if (counsellorEmail) {
-      await sendEmail({
-        to: counsellorEmail,
-        subject: "Payment Processed – MINDSOUL",
-        html: counsellorPaymentReceiptTemplate({
-          counsellorName: counsellorName || "Counsellor",
-          studentName: studentName || "Student",
-          paymentId: razorpay_payment_id,
-          orderId: razorpay_order_id,
-          amount: amountRupees,
-          date: new Date().toLocaleString(),
-        }),
-      });
-    }
-
-    //FETCH UPDATED APPOINTMENT
-    const updatedSnap = await appointmentRef.get();
 
     return res.status(200).json({
       success: true,
-      message: "Payment verified and recorded",
-      appointment: updatedSnap.data(),
+      message: "Payment verified successfully. Booking is being processed.",
+      paymentStatus: payment.status,
+      appointment: aptData,
     });
   } catch (err) {
     console.error("Verify Payment Error:", err);

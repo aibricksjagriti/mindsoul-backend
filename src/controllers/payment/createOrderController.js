@@ -1,5 +1,5 @@
 import { razorpay } from "../../services/razorpayClient.js";
-import { db as adminDb } from "../../config/firebase.js"; // NEW: import Firestore to fetch appointment
+import { db as adminDb } from "../../config/firebase.js";
 
 export const createRazorpayOrder = async (req, res) => {
   try {
@@ -14,7 +14,6 @@ export const createRazorpayOrder = async (req, res) => {
 
     const { appointmentId, currency = "INR" } = req.body;
 
-    // NEW: appointmentId must be provided
     if (!appointmentId) {
       return res.status(400).json({
         success: false,
@@ -22,7 +21,6 @@ export const createRazorpayOrder = async (req, res) => {
       });
     }
 
-    // NEW: Fetch appointment from Firestore
     const appointmentRef = adminDb
       .collection("appointments")
       .doc(appointmentId);
@@ -37,8 +35,15 @@ export const createRazorpayOrder = async (req, res) => {
 
     const appointmentData = appointmentSnap.data();
 
-    //OWNERSHIP CHECK (MUST BE HERE)
+    // Idempotency: Block double-payments explicitly
+    if (appointmentData.paymentStatus === "success") {
+      return res.status(400).json({
+        success: false,
+        message: "This appointment is already paid for.",
+      });
+    }
 
+    // OWNERSHIP CHECK
     if (appointmentData.studentId !== user.uid) {
       return res.status(403).json({
         success: false,
@@ -46,37 +51,70 @@ export const createRazorpayOrder = async (req, res) => {
       });
     }
 
-    // Fetch counsellor name for payment display
+    // SAFEGUARD: Guard against missing counsellorId for fatal 500 error blocking
+    if (!appointmentData.counsellorId) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid appointment data: missing counsellor ID.",
+      });
+    }
+
+    // Fetch counsellor name for payment metadata
     const counsellorRef = adminDb
       .collection("counsellors")
       .doc(appointmentData.counsellorId);
 
     const counsellorSnap = await counsellorRef.get();
 
+    if(!counsellorSnap.exists) {
+      return res.status(400).json({
+        success: false,
+        message: "Counsellor not found"
+      })
+    }
     const c = counsellorSnap.data();
+    
     const counsellorName =
       `${c?.profileData?.firstName || ""} ${
         c?.profileData?.lastName || ""
       }`.trim() || "Counsellor";
 
-    //prefer appointment amount, fallback to counsellor price
-    const amount = Number(
-      appointmentData.amount ?? counsellorSnap.data()?.sessionPrice
-    );
-
-    //Prevent duplicate Razorpay orders
-    if (appointmentData.razorpayOrderId) {
-      return res.status(400).json({
-        success: false,
-        message: "Payment order already created for this appointment",
-      });
-    }
+    // STRICT AMOUNT ENFORCEMENT: No live counsellor price fallbacks, use the locked-in appointment amount
+    const amount = Number(appointmentData.amount);
 
     if (!amount || isNaN(amount)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid appointment amount. Contact support.",
+        message: "Appointment must have a valid locked-in amount before checkout. Contact support.",
       });
+    }
+
+    // ABANDONED CART RESILIENCE: Instead of blocking them for having an existing order, reuse the existing un-paid order!
+    if (appointmentData.razorpayOrderId) {
+      try {
+        const existingOrder = await razorpay.orders.fetch(appointmentData.razorpayOrderId);
+        
+        // If order exists and is unpaid, seamlessly return it
+        if (existingOrder && (existingOrder.status === "created" || existingOrder.status === "attempted")) {
+          return res.status(200).json({
+            success: true,
+            message: "Existing active Razorpay order retrieved",
+            order: existingOrder,
+            appointmentId,
+            counsellorName,
+          });
+        }
+        
+        // If paid, block explicit retry
+        if (existingOrder && existingOrder.status === "paid") {
+           return res.status(400).json({
+             success: false,
+             message: "Payment already completed for this appointment",
+           });
+        }
+      } catch (e) {
+        console.warn("Could not fetch existing Razorpay order. Generating a new one gracefully.", e.message);
+      }
     }
 
     // Razorpay only accepts amount in paise (₹1 = 100 paise)
@@ -86,7 +124,6 @@ export const createRazorpayOrder = async (req, res) => {
       receipt: `receipt_${appointmentId}`,
       payment_capture: 1,
 
-      // ADD metadata
       notes: {
         appointmentId,
         counsellorName,
@@ -95,6 +132,12 @@ export const createRazorpayOrder = async (req, res) => {
     };
 
     const order = await razorpay.orders.create(options);
+
+    console.log("ORDER CREATED", {
+      appointmentId,
+      orderId: order.id,
+      amount,
+    });
 
     await appointmentRef.update({
       razorpayOrderId: order.id,
@@ -124,15 +167,9 @@ export const createRazorpayOrder = async (req, res) => {
 
 export const createRazorpayOrder_Test = async (req, res) => {
   try {
-    // ❌ REMOVE amount from client in production
-    // const { amount = 500, currency = "INR" } = req.body;
-
-    //  TEMP TEST-ONLY FIX (explicit, predictable)
-    // ⚠️ DO NOT USE THIS IN PRODUCTION
     const amount = 500; // ₹500 fixed test amount
     const currency = "INR";
 
-    //  Defensive check (still fine)
     if (!amount || isNaN(amount)) {
       return res.status(400).json({
         success: false,
@@ -140,7 +177,6 @@ export const createRazorpayOrder_Test = async (req, res) => {
       });
     }
 
-    //  Razorpay requires amount in paise (this part is CORRECT)
     const options = {
       amount: Math.round(Number(amount) * 100), // 50000 paise
       currency,
@@ -149,20 +185,15 @@ export const createRazorpayOrder_Test = async (req, res) => {
 
     const order = await razorpay.orders.create(options);
 
-    //  LOG FOR DEBUG (ADD THIS)
     console.log("RAZORPAY TEST ORDER", {
       id: order.id,
       amount: order.amount,
       currency: order.currency,
     });
-    console.log("BACKEND RAZORPAY KEY:", process.env.RAZORPAY_KEY_ID);
 
     return res.status(200).json({
       success: true,
-      order, // frontend already expects this shape
-
-      // ❌ REMOVE THIS — frontend already has the key
-      // key: process.env.RAZORPAY_KEY_ID,
+      order,
     });
   } catch (error) {
     console.error("Test Razorpay Order Error:", error);
