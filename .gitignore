@@ -4,3 +4,4 @@ README.md
 serviceAccountKey.json
 firebaseAuthKey.json
 scripts/
+audit_result.json
