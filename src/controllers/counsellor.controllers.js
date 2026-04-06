@@ -408,6 +408,7 @@ export const updateProfile = async (req, res) => {
 
     // ------------------ FINAL FIRESTORE UPDATE -----------------
     const updatePayload = {
+      email: normalizedEmail,
       profileData,
       profileCompleted: true,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
