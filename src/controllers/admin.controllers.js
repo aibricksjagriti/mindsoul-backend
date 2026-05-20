@@ -84,7 +84,7 @@ export const getAllCounsellorsAdmin = async (req, res) => {
 export const updateCounsellorAdmin = async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    // const updates = req.body;
 
     if (!id) {
       return res
@@ -109,9 +109,13 @@ export const updateCounsellorAdmin = async (req, res) => {
       try { return JSON.parse(val); } catch { return val; }
     };
 
-    const updates = Object.fromEntries(
-      Object.entries(req.body).map(([k, v]) => [k, parseField(v)])
-    );
+    // const updates = Object.fromEntries(
+    //   Object.entries(req.body).map(([k, v]) => [k, parseField(v)])
+    // );
+
+    const parsedUpdates = Object.fromEntries(
+  Object.entries(req.body).map(([k, v]) => [k, parseField(v)])
+);
 
     const directFields = ["email", "isVerified", "profileCompleted", "role"];
     const profileFields = [
@@ -124,16 +128,16 @@ export const updateCounsellorAdmin = async (req, res) => {
     const updatePayload = { updatedAt: new Date() };
 
     for (const field of directFields) {
-      if (typeof updates[field] !== "undefined") {
-        updatePayload[field] = updates[field];
-      }
+      if (typeof parsedUpdates[field] !== "undefined") {
+  updatePayload[field] = parsedUpdates[field];
+}
     }
 
     const profileUpdates = {};
     for (const field of profileFields) {
-      if (typeof updates[field] !== "undefined") {
-        profileUpdates[field] = updates[field];
-      }
+      if (typeof parsedUpdates[field] !== "undefined") {
+  profileUpdates[field] = parsedUpdates[field];
+}
     }
 
     if (req.file) {
