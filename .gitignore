@@ -3,4 +3,5 @@ node_modules/
 README.md
 serviceAccountKey.json
 firebaseAuthKey.json
-/scripts
+scripts/
+audit_result.json

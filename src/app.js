@@ -1,7 +1,7 @@
 import express from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
-import bodyParser from "body-parser";
+import helmet from "helmet";
 
 import authRoutes from "./routes/auth.routes.js";
 import counsellorRoutes from "./routes/counsellor.routes.js";
@@ -19,13 +19,20 @@ import adminRoutes from "./routes/admin.routes.js";
 //app config
 const app = express();
 
+// Secure API with safer Helmet headers
+app.use(
+  helmet({
+    contentSecurityPolicy: false, 
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
 // Allowed frontend domains
 const allowedOrigins = [
   "http://localhost:5173",
   "https://mindsoul-wellness.vercel.app",
-
-  // local payment testing (delete later)
-    "http://localhost:5173", 
+  "https://www.themindsoul.com", 
+  "https://themindsoul.vercel.app",
   "http://localhost:3000",
 ];
 
@@ -67,15 +74,21 @@ app.use((req, res, next) => {
 
 
 
-app.use(bodyParser.json({
-  verify: (req, res, buf) => {
-    req.rawBody = buf.toString();
-  }
-}));
+// 1. Webhook-specific parser MUST come first
+app.use(
+  "/api/payment/webhook",
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf; // Keep buffer for exact cryptographic match
+    },
+  })
+);
+
+// 2. Standard parser for all other routes
+app.use(express.json());
 
 
 //middlewares
-app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
@@ -99,5 +112,30 @@ app.use("/api/admin", adminRoutes);
 app.get("/", (req, res)=> {
   res.send("Hello from Mindsoul Backend");
 })
+
+// Catch-all 404 → forward to error handler
+app.use((req, res, next) => {
+  const error = new Error("API endpoint not found");
+  error.statusCode = 404;
+  next(error);
+});
+
+// GLOBAL ERROR HANDLER
+app.use((err, req, res, next) => {
+  console.error("ERROR:", {
+    message: err.message,
+    stack: err.stack,
+    path: req.originalUrl,
+    method: req.method,
+  });
+
+  res.status(err.statusCode || 500).json({
+    success: false,
+    message:
+      process.env.NODE_ENV === "production"
+        ? "Internal Server Error"
+        : err.message,
+  });
+});
 
 export default app;

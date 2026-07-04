@@ -1,15 +1,16 @@
 // src/controllers/timeslot.controllers.js
 
-import { generateSlotsForDate } from "../timeslots/slotGenerator.timeslots.js";
 import { generateSmartSlotsForDate } from "../services/timeslotGenerator.service.js";
 import { getWeeklySchedule } from "../services/schedule.service.js";
-import {
-  getAvailableFutureSlots,
-} from "../timeslots/slotService.timeslots.js";
+import { getAvailableFutureSlots } from "../timeslots/slotService.timeslots.js";
 import { groupSlotsByPeriod } from "../timeslots/slotUtils.timeslots.js";
 import admin from "firebase-admin";
 import { adminDb } from "../config/firebase.js";
 const db = admin.firestore();
+
+// How many days ahead slots should be generated
+// Can be safely increased/decreased without touching logic
+const SLOT_GENERATION_DAYS = 45;
 
 /**
  * -----------------------------------------------------------
@@ -49,7 +50,6 @@ export const getAvailableSlots = async (req, res) => {
     });
   }
 };
-
 
 // ----------------------------------------------
 // GET ALL BOOKED SLOTS FOR A COUNSELLOR + DATE
@@ -94,7 +94,6 @@ export const getBookedSlots = async (req, res) => {
   }
 };
 
-
 /**
  * ===========================================================
  * SMART WEEKLY GENERATION — GENERATE NEXT 7 DAYS
@@ -117,7 +116,8 @@ export const generateNext7Days = async (req, res) => {
     const today = new Date();
     const responses = [];
 
-    for (let i = 0; i < 7; i++) {
+    // Generate slots from today → today + SLOT_GENERATION_DAYS
+    for (let i = 0; i < SLOT_GENERATION_DAYS; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
 
@@ -180,7 +180,7 @@ export const refreshDate = async (req, res) => {
 
 /**
  * ===========================================================
- * CRON JOB — DAILY ROLLING 7 DAYS GENERATION
+ * CRON JOB — DAILY ROLLING N DAYS GENERATION
  * ===========================================================
  */
 export const cronGenerateNext7Days = async (req, res) => {
@@ -210,7 +210,7 @@ export const cronGenerateNext7Days = async (req, res) => {
       if (!weekly) continue; // skip safely
 
       // 3️⃣ Generate rolling 7 days
-      for (let i = 0; i < 7; i++) {
+      for (let i = 0; i < SLOT_GENERATION_DAYS; i++) {
         const d = new Date(today);
         d.setDate(today.getDate() + i);
         const ds = d.toISOString().split("T")[0];
@@ -223,7 +223,7 @@ export const cronGenerateNext7Days = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "CRON: 7-day rolling generation complete",
+      message: `CRON: ${SLOT_GENERATION_DAYS} rolling generation complete`,
       counsellorsProcessed: results.length,
     });
   } catch (err) {

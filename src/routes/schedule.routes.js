@@ -6,6 +6,7 @@ import {
   updateSchedule,
   addDateException,
   removeDateException,
+  getScheduleExceptionInfo,
 } from "../controllers/schedule.controllers.js";
 
 import { authenticate } from "../middlewares/auth.middlewares.js";
@@ -23,6 +24,9 @@ const router = express.Router();
 
 // Get schedule (weekly + time config)
 router.get("/:counsellorId",  getScheduleInfo);
+
+// Get schedule exceptions — for dashboard exceptions
+router.get("/exceptions/:counsellorId",authenticate, getScheduleExceptionInfo);
 
 // Update weekly schedule
 router.patch("/:counsellorId", authenticate,  updateSchedule);

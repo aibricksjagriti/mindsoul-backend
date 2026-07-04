@@ -15,12 +15,26 @@ export const generateSlotsForDate = async ({
       throw new Error("Missing required fields for slot generation");
     }
 
+        /*
+      PRODUCTION SAFETY GUARD (OPTIONAL)
+      Uncomment if you ever want to BLOCK full regeneration in prod
+    */
     /*
-    //PRODUCTION SAFETY GUARD (ADD THIS when no slot generation needed)
     if (!allowedSlotIds && process.env.NODE_ENV === "production") {
       throw new Error("Full slot regeneration is disabled in production");
-    } 
-      */
+    }
+    */
+
+     /**
+     * If allowedSlotIds is NOT provided:
+     * → full regeneration for this date
+     * → existing slots for that date are deleted first
+     *
+     * If allowedSlotIds IS provided:
+     * → only missing slots are generated
+     * → booked slots are untouched
+     */
+
 
     if (!allowedSlotIds) {
       const existingSnap = await db
@@ -34,6 +48,10 @@ export const generateSlotsForDate = async ({
       await deleteBatch.commit();
     }
 
+    /**
+     * TTL — slots auto-expire at end of the day
+     * This keeps Firestore clean
+     */
     const expiresAt = admin.firestore.Timestamp.fromDate(
       new Date(`${date}T23:59:59`)
     );
@@ -41,10 +59,16 @@ export const generateSlotsForDate = async ({
     const operations = [];
     let createdCount = 0;
 
+    /**
+     * Slot timing rules
+     */
     const SESSION_DURATION = slotDuration; // 30
     const BREAK_DURATION = 15; // fixed rule
     const STEP = SESSION_DURATION + BREAK_DURATION; // 45
 
+    /**
+     * Loop over periods (morning / afternoon / evening)
+     */
     for (const period of Object.keys(workingHours)) {
       const periodData = workingHours[period];
       if (!periodData?.start || !periodData?.end) continue;
@@ -55,6 +79,9 @@ export const generateSlotsForDate = async ({
       const startMinutes = sh * 60 + sm;
       const endMinutes = eh * 60 + em;
 
+      /**
+       * Generate slots inside the period window
+       */
       for (
         let t = startMinutes;
         t + SESSION_DURATION <= endMinutes;
@@ -74,10 +101,18 @@ export const generateSlotsForDate = async ({
           endM
         ).padStart(2, "0")}`;
 
+
+        /**
+         * Deterministic document ID
+         * Ensures idempotency
+         */
         const docId = `${counsellorId}_${date}_${period}_${startTime}`;
 
 
-        //generate ONLY allowed (missing) slots
+        /**
+         * If allowedSlotIds exists:
+         * → generate ONLY missing slots
+         */
         if (allowedSlotIds && !allowedSlotIds.has(docId)) {
           continue; // do not overwrite existing or booked slots
         } 
@@ -103,8 +138,9 @@ export const generateSlotsForDate = async ({
       }
     }
 
-    // Now safely commit in chunks of 400
-    // batch write
+    /**
+     * Firestore batch limit safety
+     */
     const chunkSize = 400;
     for (let i = 0; i < operations.length; i += chunkSize) {
       const batch = db.batch();

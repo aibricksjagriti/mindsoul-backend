@@ -8,11 +8,12 @@ import {
   getCounsellorPayments,
   getUserPayments,
 } from "../controllers/payment/paymentHistoryController.js";
+import { paymentRateLimiter } from "../middlewares/rateLimiter.middlewares.js";
 
 const router = express.Router();
 
-router.post("/create-order", authenticate, createRazorpayOrder);
-router.post("/create-order", createRazorpayOrder_Test);
+router.post("/create-order", authenticate, paymentRateLimiter, createRazorpayOrder);
+// router.post("/create-order", createRazorpayOrder_Test);
 
 // user payment history
 router.get("/history/user", authenticate, getUserPayments);

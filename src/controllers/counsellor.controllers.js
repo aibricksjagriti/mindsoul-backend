@@ -108,7 +108,6 @@ export const sendOtp = async (req, res) => {
   }
 };
 
-
 export const verifyOtp = async (req, res) => {
   try {
     const { email, otp } = req.body;
@@ -336,12 +335,24 @@ export const updateProfile = async (req, res) => {
       profileData.languages = toArray(languages).map((s) => s.trim());
     }
 
-    // Session Price
+    // Session Price (APPLY 20% PLATFORM FEE HERE)
     if (typeof sessionPrice !== "undefined") {
-      const parsed = Number(sessionPrice);
-      profileData.sessionPrice = Number.isFinite(parsed)
-        ? parsed
-        : sessionPrice; // fallback to string if not numeric
+      const basePrice = Number(sessionPrice);
+
+      if (!Number.isFinite(basePrice) || basePrice <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "sessionPrice must be a valid positive number",
+        });
+      }
+
+      const platformFee = Math.round(basePrice * 0.2);
+      const finalPrice = basePrice + platformFee;
+
+      // store both (recommended)
+      profileData.basePrice = basePrice; // counsellor-entered
+      profileData.platformFee = platformFee; // 20%
+      profileData.sessionPrice = finalPrice; // FINAL payable amount
     }
 
     // ------------------ NEW: focusAreas -------------------------
@@ -365,35 +376,39 @@ export const updateProfile = async (req, res) => {
     }
 
     //Default schedulePreferences should match workingHours periods only
-if (!counsellorData.schedulePreferences) {
+    if (!counsellorData.schedulePreferences) {
+      // Use the incoming workingHours from profileData FIRST
+      const wh =
+        profileData.workingHours || counsellorData.profileData?.workingHours;
 
-  // Use the incoming workingHours from profileData FIRST
-  const wh = profileData.workingHours || counsellorData.profileData?.workingHours;
+      const hasMorning = wh?.morning ? true : false;
+      const hasAfternoon = wh?.afternoon ? true : false;
+      const hasEvening = wh?.evening ? true : false;
 
-  const hasMorning = wh?.morning ? true : false;
-  const hasAfternoon = wh?.afternoon ? true : false;
-  const hasEvening = wh?.evening ? true : false;
+      const defaultDay = {
+        morning: hasMorning,
+        afternoon: hasAfternoon,
+        evening: hasEvening,
+      };
 
-  const defaultDay = {
-    morning: hasMorning,
-    afternoon: hasAfternoon,
-    evening: hasEvening,
-  };
+      profileData.schedulePreferences = {
+        Monday: { ...defaultDay },
+        Tuesday: { ...defaultDay },
+        Wednesday: { ...defaultDay },
+        Thursday: { ...defaultDay },
+        Friday: { ...defaultDay },
+        Saturday: { ...defaultDay },
+        Sunday: { ...defaultDay },
+      };
+    }
 
-  profileData.schedulePreferences = {
-    Monday:    { ...defaultDay },
-    Tuesday:   { ...defaultDay },
-    Wednesday: { ...defaultDay },
-    Thursday:  { ...defaultDay },
-    Friday:    { ...defaultDay },
-    Saturday:  { ...defaultDay },
-    Sunday:    { ...defaultDay }
-  };
-}
-
+    if (!counsellorData.scheduleExceptions) {
+      profileData.scheduleExceptions = {};
+    }
 
     // ------------------ FINAL FIRESTORE UPDATE -----------------
     const updatePayload = {
+      email: normalizedEmail,
       profileData,
       profileCompleted: true,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),

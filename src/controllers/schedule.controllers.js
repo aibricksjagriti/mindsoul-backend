@@ -4,11 +4,10 @@ import { db } from "../config/firebase.js";
 import {
   getWeeklySchedule,
   updateWeeklySchedule,
-  getDateException,
-  setDateException,
   deleteDateException,
   getCounsellorTimeConfig,
 } from "../services/schedule.service.js";
+import { generateSmartSlotsForDate } from "../services/timeslotGenerator.service.js";
 
 /**
  * ---------------------------------------------------------
@@ -112,7 +111,7 @@ export const updateSchedule = async (req, res) => {
 export const addDateException = async (req, res) => {
   try {
     const counsellorId = req.params.counsellorId;
-    const { date, overrideType, morning, afternoon, evening } = req.body;
+    const { date, overrideType, morning, afternoon, evening, force } = req.body;
 
     if (!date) {
       return res.status(400).json({
@@ -121,9 +120,39 @@ export const addDateException = async (req, res) => {
       });
     }
 
-    const ref = db.collection("counsellors").doc(counsellorId);
+    const counsellorRef = db.collection("counsellors").doc(counsellorId);
 
-    // Build exception object
+    /**
+     * ---------------------------------------------------------
+     * Check for already booked slots on this date
+     * ---------------------------------------------------------
+     * Booked appointments must NEVER be deleted or cancelled.
+     * If bookings exist, warn counsellor unless force=true.
+     */
+    const bookedSnap = await db
+      .collection("timeSlots")
+      .where("counsellorId", "==", counsellorId)
+      .where("date", "==", date)
+      .get();
+
+    const hasBookings = !bookedSnap.empty;
+
+    // If bookings exist and counsellor has NOT confirmed force
+    if (hasBookings && !force) {
+      return res.status(200).json({
+        success: false,
+        requiresConfirmation: true,
+        bookedCount: bookedSnap.size,
+        message:
+          "You already have booked appointments on this date. Adding an exception will block new bookings, but you must still attend existing appointments. Do you want to continue?",
+      });
+    }
+
+    /**
+     * ---------------------------------------------------------
+     * Build exception object
+     * ---------------------------------------------------------
+     */
     let exceptionData = {};
 
     // FULL DAY OFF
@@ -139,8 +168,12 @@ export const addDateException = async (req, res) => {
       };
     }
 
-    // Write into root document using a MAP field
-    await ref.set(
+    /**
+     * ---------------------------------------------------------
+     * Save exception into counsellor document (MAP field)
+     * ---------------------------------------------------------
+     */
+    await counsellorRef.set(
       {
         scheduleExceptions: {
           [date]: exceptionData,
@@ -148,10 +181,22 @@ export const addDateException = async (req, res) => {
       },
       { merge: true }
     );
+    /**
+     * ---------------------------------------------------------
+     * APPLY exception immediately for this date
+     * ---------------------------------------------------------
+     * This will:
+     * - delete unbooked slots if day is off
+     * - keep booked slots intact
+     * - NOT touch other dates
+     */
+    await generateSmartSlotsForDate(counsellorId, date);
 
     return res.json({
       success: true,
-      message: "Date exception saved",
+      message: hasBookings
+        ? "Date exception saved and applied. Existing appointments are preserved."
+        : "Date exception saved and applied",
     });
   } catch (err) {
     console.error("Add exception error:", err);
@@ -184,6 +229,58 @@ export const removeDateException = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: err.message,
+    });
+  }
+};
+
+/**
+ * ---------------------------------------------------------
+ * GET Counsellor Schedule + Exceptions
+ * ---------------------------------------------------------
+ * This is used by the counsellor dashboard.
+ * It returns schedule-related configuration with SAFE defaults.
+ */
+export const getScheduleExceptionInfo = async (req, res) => {
+  try {
+    const { counsellorId } = req.params;
+
+    if (!counsellorId) {
+      return res.status(400).json({
+        success: false,
+        message: "counsellorId is required",
+      });
+    }
+
+    const ref = adminDb.collection("counsellors").doc(counsellorId);
+    const snap = await ref.get();
+
+    if (!snap.exists) {
+      return res.status(404).json({
+        success: false,
+        message: "Counsellor not found",
+      });
+    }
+
+    const data = snap.data();
+
+    //frontend should never get undefined
+    const schedule = {
+      weeklySchedule: data.weeklySchedule || {},
+      workingHours: data.workingHours || {},
+      slotDuration: data.slotDuration || null,
+      scheduleExceptions: data.scheduleExceptions || {},
+    };
+
+    return res.status(200).json({
+      success: true,
+      schedule,
+    });
+  } catch (err) {
+    console.error("getScheduleExceptionInfo error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch schedule exceptions",
+      error: err.message,
     });
   }
 };
