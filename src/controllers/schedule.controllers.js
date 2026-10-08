@@ -6,8 +6,10 @@ import {
   updateWeeklySchedule,
   deleteDateException,
   getCounsellorTimeConfig,
+  setDateException,
 } from "../services/schedule.service.js";
 import { generateSmartSlotsForDate } from "../services/timeslotGenerator.service.js";
+import { indiaDateString, isDateString } from "../timeslots/slotUtils.timeslots.js";
 
 /**
  * ---------------------------------------------------------
@@ -54,7 +56,7 @@ export const updateSchedule = async (req, res) => {
     //  Prefer schedulePreferences if provided, otherwise fall back to weekly
     const incoming = prefsFromBody ?? weeklyFromBody;
 
-    if (!incoming || typeof incoming !== "object") {
+    if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) {
       return res.status(400).json({
         success: false,
         message:
@@ -74,9 +76,12 @@ export const updateSchedule = async (req, res) => {
     //  Optional: normalize keys (frontend might send lowercase days)
     // We keep whatever keys were sent but it's common to send Monday..Sunday
     const weeklyData = {};
+    const validDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
     for (const k of dayKeys) {
       const val = incoming[k];
-      if (typeof val !== "object") {
+      if (!validDays.includes(k) || !val || typeof val !== "object" || Array.isArray(val) ||
+          Object.entries(val).some(([period, enabled]) =>
+            !["morning", "afternoon", "evening"].includes(period) || typeof enabled !== "boolean")) {
         return res.status(400).json({
           success: false,
           message: `Invalid value for day '${k}' — expected an object with period booleans`,
@@ -88,6 +93,14 @@ export const updateSchedule = async (req, res) => {
 
     // Call service unchanged (service expects the weekly object)
     const result = await updateWeeklySchedule(counsellorId, weeklyData);
+
+    // Reconcile the same horizon as the existing daily generation job.
+    const today = new Date(`${indiaDateString()}T00:00:00Z`);
+    for (let i = 0; i < 45; i++) {
+      const date = new Date(today);
+      date.setUTCDate(today.getUTCDate() + i);
+      await generateSmartSlotsForDate(counsellorId, date.toISOString().slice(0, 10));
+    }
 
     return res.status(200).json({
       success: true,
@@ -113,14 +126,13 @@ export const addDateException = async (req, res) => {
     const counsellorId = req.params.counsellorId;
     const { date, overrideType, morning, afternoon, evening, force } = req.body;
 
-    if (!date) {
+    if (!isDateString(date) || (force !== undefined && typeof force !== "boolean") ||
+        [morning, afternoon, evening].some((value) => value !== undefined && value !== null && typeof value !== "boolean")) {
       return res.status(400).json({
         success: false,
-        message: "date is required",
+        message: "A valid YYYY-MM-DD date and boolean availability values are required",
       });
     }
-
-    const counsellorRef = db.collection("counsellors").doc(counsellorId);
 
     /**
      * ---------------------------------------------------------
@@ -133,6 +145,7 @@ export const addDateException = async (req, res) => {
       .collection("timeSlots")
       .where("counsellorId", "==", counsellorId)
       .where("date", "==", date)
+      .where("isBooked", "==", true)
       .get();
 
     const hasBookings = !bookedSnap.empty;
@@ -173,14 +186,7 @@ export const addDateException = async (req, res) => {
      * Save exception into counsellor document (MAP field)
      * ---------------------------------------------------------
      */
-    await counsellorRef.set(
-      {
-        scheduleExceptions: {
-          [date]: exceptionData,
-        },
-      },
-      { merge: true }
-    );
+    await setDateException(counsellorId, date, exceptionData);
     /**
      * ---------------------------------------------------------
      * APPLY exception immediately for this date
@@ -216,8 +222,10 @@ export const removeDateException = async (req, res) => {
   try {
     const counsellorId = req.params.counsellorId;
     const date = req.params.date;
+    if (!isDateString(date)) return res.status(400).json({ success: false, message: "Invalid date" });
 
     const result = await deleteDateException(counsellorId, date);
+    await generateSmartSlotsForDate(counsellorId, date);
 
     return res.status(200).json({
       success: true,
@@ -251,7 +259,7 @@ export const getScheduleExceptionInfo = async (req, res) => {
       });
     }
 
-    const ref = adminDb.collection("counsellors").doc(counsellorId);
+    const ref = db.collection("counsellors").doc(counsellorId);
     const snap = await ref.get();
 
     if (!snap.exists) {
@@ -266,8 +274,8 @@ export const getScheduleExceptionInfo = async (req, res) => {
     //frontend should never get undefined
     const schedule = {
       weeklySchedule: data.weeklySchedule || {},
-      workingHours: data.workingHours || {},
-      slotDuration: data.slotDuration || null,
+      workingHours: data.profileData?.workingHours || {},
+      slotDuration: data.profileData?.slotDuration ?? 30,
       scheduleExceptions: data.scheduleExceptions || {},
     };
 

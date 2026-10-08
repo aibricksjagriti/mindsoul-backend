@@ -1,65 +1,20 @@
-// src/middlewares/userProfileValidator.js
-
 export const validateUserProfile = (req, res, next) => {
-  const { age, gender, phone, medications, medicalHistory } = req.body;
-
-  // Required fields
-  if (!age || !gender || !phone) {
-    return res.status(400).json({
-      success: false,
-      message: "age, gender, and phone are required",
-    });
+  const body = req.body || {};
+  const { age, gender, phone, medications, medicalHistory } = body;
+  const reject = (message) => res.status(400).json({ success: false, message });
+  if (!["string", "number"].includes(typeof age) || !Number.isInteger(Number(age)) || Number(age) < 1 || Number(age) > 120) {
+    return reject("Age must be an integer between 1 and 120");
   }
-
-  // Age: must be a number and within valid range
-  if (isNaN(age) || age < 1 || age > 120) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid age. Must be a number between 1 and 120.",
-    });
+  if (typeof gender !== "string" || !["male", "female", "other"].includes(gender.trim().toLowerCase())) {
+    return reject("Gender must be male, female, or other");
   }
-
-  // Gender validation
-  const allowedGenders = ["male", "female", "other"];
-  if (!allowedGenders.includes(gender.toLowerCase())) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid gender. Allowed: male, female, other.",
-    });
+  if (typeof phone !== "string" || !/^\d{10}$/.test(phone.trim())) return reject("Phone must be a 10-digit string");
+  for (const [field, value] of Object.entries({ medications, medicalHistory })) {
+    if (value !== undefined && value !== null && typeof value !== "string" &&
+        !(Array.isArray(value) && value.every((item) => typeof item === "string"))) {
+      return reject(`${field} must be a string or an array of strings`);
+    }
   }
-
-  // Phone validation: must be 10 digits
-  const phoneRegex = /^[0-9]{10}$/;
-  if (!phoneRegex.test(phone)) {
-    return res.status(400).json({
-      success: false,
-      message: "Invalid phone number. Must be 10 digits.",
-    });
-  }
-
-  // medications: must be string or array
-  if (
-    medications &&
-    !Array.isArray(medications) &&
-    typeof medications !== "string"
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "medications must be a string or an array",
-    });
-  }
-
-  // medicalHistory: must be string or array
-  if (
-    medicalHistory &&
-    !Array.isArray(medicalHistory) &&
-    typeof medicalHistory !== "string"
-  ) {
-    return res.status(400).json({
-      success: false,
-      message: "medicalHistory must be a string or an array",
-    });
-  }
-
+  req.body = { ...body, age: Number(age), gender: gender.trim().toLowerCase(), phone: phone.trim() };
   next();
 };

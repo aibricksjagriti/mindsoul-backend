@@ -5,7 +5,7 @@ const OWNER_EMAIL=process.env.MINDSOUL_OWNER_EMAIL
 
 export const sendQuoteRequestEmail = async (data) => {
   const mailOptions = {
-    from: `"MindSoul Notifications" <no-reply@mindsoul.com>`,
+    from: `"MindSoul Notifications" <${process.env.MAIL_USER}>`,
     to: OWNER_EMAIL,
     subject: `New Custom Quote Request – ${data.firstName} ${data.lastName}`,
     html: quoteRequestEmailTemplate(data)

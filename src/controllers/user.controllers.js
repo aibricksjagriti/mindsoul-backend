@@ -181,6 +181,7 @@ export const getUserAppointments = async (req, res) => {
         date: data.date || null,
         timeSlot: data.timeSlot || null,
         status: data.status || null,
+        bookingType: data.bookingType || null,
         meetingLink: data.zoomLink || null,
         createdAt: data.createdAt || null,
       };

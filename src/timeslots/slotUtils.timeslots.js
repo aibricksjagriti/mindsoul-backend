@@ -4,7 +4,8 @@
  */
 export const isFutureDateTime = (isoDateTime) => {
   const now = new Date();
-  const target = new Date(isoDateTime);
+  const target = new Date(/(?:Z|[+-]\d{2}:\d{2})$/.test(isoDateTime)
+    ? isoDateTime : `${isoDateTime}+05:30`);
   return target.getTime() > now.getTime();
 };
 
@@ -33,5 +34,11 @@ export const groupSlotsByPeriod = (slots = []) => {
  * Convert a Firestore date + time fields to a JS Date object
  */
 export const toDateTime = (date, time) => {
-  return new Date(`${date}T${time}:00`);
+  return new Date(`${date}T${time}:00+05:30`);
 };
+
+export const indiaDateString = (date = new Date()) =>
+  new Date(date.getTime() + 330 * 60 * 1000).toISOString().slice(0, 10);
+
+export const isDateString = (value) => typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  Number.isFinite(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;

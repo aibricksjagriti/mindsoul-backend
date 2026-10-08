@@ -10,6 +10,7 @@ import {
 } from "../controllers/schedule.controllers.js";
 
 import { authenticate } from "../middlewares/auth.middlewares.js";
+import { requireCounsellorOwner } from "../middlewares/counsellorAccess.middlewares.js";
 
 const router = express.Router();
 
@@ -26,15 +27,15 @@ const router = express.Router();
 router.get("/:counsellorId",  getScheduleInfo);
 
 // Get schedule exceptions — for dashboard exceptions
-router.get("/exceptions/:counsellorId",authenticate, getScheduleExceptionInfo);
+router.get("/exceptions/:counsellorId", authenticate, requireCounsellorOwner, getScheduleExceptionInfo);
 
 // Update weekly schedule
-router.patch("/:counsellorId", authenticate,  updateSchedule);
+router.patch("/:counsellorId", authenticate, requireCounsellorOwner, updateSchedule);
 
 // Add or update date exception
-router.post("/:counsellorId/exception", authenticate,  addDateException);
+router.post("/:counsellorId/exception", authenticate, requireCounsellorOwner, addDateException);
 
 // Delete an exception for a specific date
-router.delete("/:counsellorId/exception/:date", authenticate,  removeDateException);
+router.delete("/:counsellorId/exception/:date", authenticate, requireCounsellorOwner, removeDateException);
 
 export default router;

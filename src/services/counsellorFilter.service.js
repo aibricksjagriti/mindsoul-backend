@@ -55,63 +55,19 @@ import { db } from "../config/firebase.js";
 //   return results;
 // };
 
-export const filterCounsellorsService = async (filters) => {
-  const { languages, expertise } = filters;
-
+export const filterCounsellorsService = async ({ languages = [], expertise = [] }) => {
   let query = db.collection("counsellors").where("isCounsellor", "==", true);
-
-  let primaryFilterApplied = false;
-
-  if (languages && languages.length > 0) {
-    query = query.where(
-      "profileData.languages",
-      "array-contains-any",
-      languages
-    );
-    primaryFilterApplied = true;
-  } else if (expertise && expertise.length > 0) {
-    query = query.where(
-      "profileData.expertise",
-      "array-contains-any",
-      expertise
-    );
-    primaryFilterApplied = true;
-  }
-
+  // Use one array filter; apply both requested dimensions to the resulting records.
+  if (languages.length) query = query.where("profileData.languages", "array-contains-any", languages.slice(0, 30));
+  else if (expertise.length) query = query.where("profileData.expertise", "array-contains-any", expertise.slice(0, 30));
+  if (languages.length > 30 || expertise.length > 30) throw new Error("At most 30 filters per dimension are supported");
   const snapshot = await query.get();
-
-  //sending the final filtered data to frontend 
-  let results = snapshot.docs.map((doc) => {
-  const data = doc.data();
-  const p = data.profileData || {};
-
-  return {
-    id: doc.id,
-    firstName: p.firstName?.trim() || "",
-    lastName: p.lastName?.trim() || "",
-    expertise: p.expertise || [],
-    experience: p.experience?.trim() || "",
-    languages: p.languages || [],
-    imageUrl: p.imageUrl || "",
-  };
-});
-
-
-  if (!primaryFilterApplied && languages && languages.length > 0) {
-    results = results.filter((c) =>
-      c.profileData?.languages?.some((lang) => languages.includes(lang))
-    );
-  }
-
-  if (
-    expertise &&
-    expertise.length > 0 &&
-    !(primaryFilterApplied && languages)
-  ) {
-    results = results.filter((c) =>
-      c.profileData?.expertise?.some((exp) => expertise.includes(exp))
-    );
-  }
-
-  return results;
+  const text = (value) => typeof value === "string" ? value.trim() : String(value ?? "");
+  const array = (value) => Array.isArray(value) ? value.filter((item) => typeof item === "string") : typeof value === "string" ? [value] : [];
+  return snapshot.docs.filter((doc) => doc.data().profileCompleted === true && doc.data().isVerified === true).map((doc) => {
+    const p = doc.data().profileData || {};
+    return { id: doc.id, counsellorId: doc.id, firstName: text(p.firstName), lastName: text(p.lastName),
+      expertise: array(p.expertise), experience: text(p.experience), languages: array(p.languages), imageUrl: text(p.imageUrl) };
+  }).filter((c) => (!languages.length || c.languages.some((value) => languages.includes(value))) &&
+    (!expertise.length || c.expertise.some((value) => expertise.includes(value))));
 };

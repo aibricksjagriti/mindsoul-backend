@@ -48,14 +48,9 @@ export const updateWeeklySchedule = async (counsellorId, weeklyData) => {
  * ---------------------------------------
  */
 export const getDateException = async (counsellorId, date) => {
-  const ref = db
-    .collection("counsellors")
-    .doc(counsellorId)
-    .collection("exceptions")
-    .doc(date);
-
+  const ref = db.collection("counsellors").doc(counsellorId);
   const doc = await ref.get();
-  return doc.exists ? doc.data() : null;
+  return doc.exists ? doc.data().scheduleExceptions?.[date] ?? null : null;
 };
 
 /**
@@ -68,20 +63,8 @@ export const getDateException = async (counsellorId, date) => {
  * }
  */
 export const setDateException = async (counsellorId, date, exceptionData) => {
-  const ref = db
-    .collection("counsellors")
-    .doc(counsellorId)
-    .collection("exceptions")
-    .doc(date);
-
-  await ref.set(
-    {
-      date,
-      ...exceptionData,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
+  const ref = db.collection("counsellors").doc(counsellorId);
+  await ref.update(new admin.firestore.FieldPath("scheduleExceptions", date), exceptionData);
 
   return { success: true };
 };
@@ -92,13 +75,8 @@ export const setDateException = async (counsellorId, date, exceptionData) => {
  * ---------------------------------------
  */
 export const deleteDateException = async (counsellorId, date) => {
-  const ref = db
-    .collection("counsellors")
-    .doc(counsellorId)
-    .collection("exceptions")
-    .doc(date);
-
-  await ref.delete();
+  const ref = db.collection("counsellors").doc(counsellorId);
+  await ref.update(new admin.firestore.FieldPath("scheduleExceptions", date), admin.firestore.FieldValue.delete());
   return { success: true };
 };
 
@@ -156,6 +134,7 @@ export const resolveFinalPeriods = async (counsellorId, dateStr) => {
   // 2️⃣ Convert date → weekday name
   const dayName = new Date(dateStr).toLocaleDateString("en-US", {
     weekday: "long",
+    timeZone: "Asia/Kolkata",
   });
 
   // 3️⃣ Base availability from weekly schedule

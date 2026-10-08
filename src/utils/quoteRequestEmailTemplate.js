@@ -1,4 +1,8 @@
-export const quoteRequestEmailTemplate = (data) => {
+import { escapeHtml } from "./escapeHtml.js";
+
+export const quoteRequestEmailTemplate = (input) => {
+  const data = Object.fromEntries(Object.entries(input).map(([key, value]) =>
+    [key, key === "allowCommunication" ? value : escapeHtml(value)]));
   return `
   
   

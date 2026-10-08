@@ -8,6 +8,8 @@ import {
   cronGenerateNext7Days,
 } from "../controllers/timeslot.controllers.js";
 import cronAuth from "../middlewares/cronAuth.middlewares.js";
+import { requireCounsellorOwner } from "../middlewares/counsellorAccess.middlewares.js";
+import { getAvailabilitySummary } from "../controllers/availability.controllers.js";
 
 const router = express.Router();
 
@@ -29,6 +31,7 @@ const router = express.Router();
 
 // Get available grouped slots (public)
 router.get("/counsellor/:id/slots", getAvailableSlots);
+router.get("/counsellor/:id/availability", getAvailabilitySummary);
 
 // Get booked slots for a date (public)
 router.get("/counsellor/:id/booked", getBookedSlots);
@@ -41,10 +44,10 @@ router.get("/counsellor/:id/booked", getBookedSlots);
  */
 
 // Generate slots for upcoming days (weekly schedule)
-router.post("/counsellor/:id/generate-week", authenticate, generateNext7Days);
+router.post("/counsellor/:id/generate-week", authenticate, requireCounsellorOwner, generateNext7Days);
 
 // Refresh slots for a specific date
-router.post("/counsellor/:id/refresh", refreshDate);
+router.post("/counsellor/:id/refresh", authenticate, requireCounsellorOwner, refreshDate);
 
 /**
  * INTERNAL (Cloud Scheduler only)

@@ -94,6 +94,34 @@
         }
       ],
       "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "counsellors",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "isCounsellor",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "profileData.languages",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "counsellors",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "isCounsellor",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "profileData.expertise",
+          "arrayConfig": "CONTAINS"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
