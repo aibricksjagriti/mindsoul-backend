@@ -13,6 +13,9 @@ import paymentRoutes from "./routes/payment.routes.js";
 import scheduleRoutes from "./routes/schedule.routes.js";
 import cronRoutes from "./routes/cron.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
+import complimentaryRoutes from "./routes/complimentary.routes.js";
+import accountRecoveryRoutes from "./routes/accountRecovery.routes.js";
+import sessionSupportRoutes from "./routes/sessionSupport.routes.js";
 
 
 
@@ -104,6 +107,9 @@ app.use("/api/payment", paymentRoutes)
 app.use("/api/schedule", scheduleRoutes);
 app.use("/internal/cron", cronRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/complimentary", complimentaryRoutes);
+app.use("/api/account", accountRecoveryRoutes);
+app.use("/api/session-support", sessionSupportRoutes);
 
 
 

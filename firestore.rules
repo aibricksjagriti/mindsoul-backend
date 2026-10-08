@@ -7,11 +7,13 @@ service cloud.firestore {
     // ============================================================
     match /users/{userId} {
 
-      // User can read/update/delete ONLY their own profile
-      allow read, update, delete: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && request.auth.uid == userId;
 
-      // Allow authenticated users to create their own profile specifically (prevents spoofing)
-      allow create: if request.auth != null && request.auth.uid == userId;
+      // Identity, roles and credentials are managed by the backend Admin SDK.
+      allow update: if request.auth != null && request.auth.uid == userId
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['age', 'gender', 'phone', 'medications', 'medicalHistory']);
+      allow create, delete: if false;
 
       // Each user has a subcollection of appointments
       match /appointments/{appointmentId} {

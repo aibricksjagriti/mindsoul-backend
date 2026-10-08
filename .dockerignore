@@ -1,0 +1,9 @@
+.git
+node_modules
+.env
+.env.*
+*.private.json
+firebaseAuthKey.json
+serviceAccountKey.json
+audit_result.json
+npm-debug.log*

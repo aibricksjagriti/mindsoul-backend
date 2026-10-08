@@ -4,6 +4,8 @@ import nodemailer from "nodemailer";
 import { getOtpEmailHtml } from "../utils/emailTemplate.js";
 import jwt from "jsonwebtoken";
 import { filterCounsellorsService } from "../services/counsellorFilter.service.js";
+import { generateSmartSlotsForDate } from "../services/timeslotGenerator.service.js";
+import { indiaDateString } from "../timeslots/slotUtils.timeslots.js";
 
 //This is helper function to encode email for firestore
 const encodeEmail = (email) => email.replace(/\./g, "_");
@@ -415,7 +417,27 @@ export const updateProfile = async (req, res) => {
       deleteAt: admin.firestore.FieldValue.delete(),
     };
 
+    if (!counsellorData.weeklySchedule) {
+      const hours = profileData.workingHours || counsellorData.profileData?.workingHours || {};
+      const days = profileData.workingDays || counsellorData.profileData?.workingDays || [];
+      updatePayload.weeklySchedule = Object.fromEntries(
+        ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map((day) => [day,
+          Object.fromEntries(["morning", "afternoon", "evening"].map((period) => [period,
+            days.includes(day) && !!hours[period]?.start && !!hours[period]?.end])),
+        ]),
+      );
+    }
+
     await counsellorRef.set(updatePayload, { merge: true });
+
+    if (updatePayload.weeklySchedule) {
+      const today = new Date(`${indiaDateString()}T00:00:00Z`);
+      for (let i = 0; i < 45; i++) {
+        const date = new Date(today);
+        date.setUTCDate(today.getUTCDate() + i);
+        await generateSmartSlotsForDate(counsellorId, date.toISOString().slice(0, 10));
+      }
+    }
 
     const updatedSnap = await counsellorRef.get();
 
@@ -450,14 +472,14 @@ export const getAllCounsellors = async (req, res) => {
         firstName: data.profileData?.firstName || "",
         lastName: data.profileData?.lastName || "",
         experience: data.profileData?.experience || "",
-        expertise: data.profileData?.expertise || "",
-        languages: data.profileData?.languages || [],
+        expertise: toArray(data.profileData?.expertise).filter((item) => typeof item === "string"),
+        languages: toArray(data.profileData?.languages).filter((item) => typeof item === "string"),
         sessionPrice: data.profileData?.sessionPrice || "",
-        focusAreas: data.profileData?.focusAreas || [],
+        focusAreas: toArray(data.profileData?.focusAreas).filter((item) => typeof item === "string"),
         description: data.profileData?.description || "",
         phoneNumber: data.profileData?.phoneNumber || "",
         email: data.email,
-        workingDays: data.profileData?.workingDays || [],
+        workingDays: toArray(data.profileData?.workingDays).filter((item) => typeof item === "string"),
         workingHours: data.profileData?.workingHours || {},
       };
     });
@@ -467,7 +489,7 @@ export const getAllCounsellors = async (req, res) => {
       counsellors,
     });
   } catch (error) {
-    console.error("getAllCounsellors error:", err);
+    console.error("getAllCounsellors error:", error);
     return res.status(500).json({ message: "Failed to fetch counsellors" });
   }
 };
@@ -501,15 +523,16 @@ export const getAllCounsellorsById = async (req, res) => {
       firstName: data.profileData?.firstName || "",
       lastName: data.profileData?.lastName || "",
       experience: data.profileData?.experience || "",
-      expertise: data.profileData?.expertise || [],
-      languages: data.profileData?.languages || [],
+      expertise: toArray(data.profileData?.expertise).filter((item) => typeof item === "string"),
+      languages: toArray(data.profileData?.languages).filter((item) => typeof item === "string"),
       sessionPrice: data.profileData?.sessionPrice || "",
-      focusAreas: data.profileData?.focusAreas || [],
+      focusAreas: toArray(data.profileData?.focusAreas).filter((item) => typeof item === "string"),
       description: data.profileData?.description || "",
       phoneNumber: data.profileData?.phoneNumber || "",
-      email: data.email || email,
-      workingDays: data.profileData?.workingDays || [],
+      email: data.email || "",
+      workingDays: toArray(data.profileData?.workingDays).filter((item) => typeof item === "string"),
       workingHours: data.profileData?.workingHours || {},
+      slotDuration: data.profileData?.slotDuration ?? 30,
     };
 
     return res.status(200).json({
@@ -612,6 +635,7 @@ export const getCounsellorAppointments = async (req, res) => {
         date: data.date || null,
         timeSlot: data.timeSlot || null,
         status: data.status || null,
+        bookingType: data.bookingType || null,
 
         // Counsellor sees HOST/START URL (not join URL)
         startUrl: data.zoomStartUrl || data.zoomLink || null, // fallback

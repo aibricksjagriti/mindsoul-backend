@@ -16,7 +16,8 @@ export const createQuoteRequest = async (req , res) => {
       country: data.country,
       employees: data.employees,
       allowCommunication: data.allowCommunication || false,
-      createdAt: new Date()
+      createdAt: new Date(),
+      notificationStatus: "pending",
     };
 
 
@@ -24,7 +25,13 @@ export const createQuoteRequest = async (req , res) => {
     const docRef = await db.collection("quoteRequests").add(payload);
 
     //Trigger an email notification using the payload data
-    await sendQuoteRequestEmail(payload);
+    try {
+      await sendQuoteRequestEmail(payload);
+      await docRef.update({ notificationStatus: "sent" });
+    } catch (notificationError) {
+      console.error("Quote notification failed; request remains saved:", docRef.id, notificationError.message);
+      // Do not tell the client to retry a request which has already been accepted.
+    }
 
     // Send a success response back to the client with the new document ID
     return res.status(201).json({
