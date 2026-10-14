@@ -35,6 +35,8 @@ const allowedOrigins = [
   "http://localhost:5173",
   "https://mindsoul-wellness.vercel.app",
   "https://www.themindsoul.com", 
+  "https://themindsoul.in",
+  "https://www.themindsoul.in",
   "https://themindsoul.vercel.app",
   "http://localhost:3000",
 ];

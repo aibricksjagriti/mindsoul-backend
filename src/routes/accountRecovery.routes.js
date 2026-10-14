@@ -6,7 +6,7 @@ import { createAccountRecovery } from "../services/accountRecovery.service.js";
 
 const router = express.Router();
 const transport = () => nodemailer.createTransport({service:"gmail",connectionTimeout:10000,socketTimeout:15000,auth:{user:process.env.MAIL_USER,pass:process.env.MAIL_PASS}});
-const service = createAccountRecovery({ db, frontendUrl:process.env.FRONTEND_URL || "https://www.themindsoul.com", hashPassword:argon2.hash,
+const service = createAccountRecovery({ db, frontendUrl:process.env.FRONTEND_URL || "https://www.themindsoul.in", hashPassword:argon2.hash,
   verifyMail:() => transport().verify(),
   sendMail:(email,url) => transport().sendMail({from:{name:"MindSoul",address:process.env.MAIL_USER},to:email,subject:"Reset your MindSoul password",text:`Use this link within 15 minutes to reset your password:\n${url}\nIf you did not request this, ignore this email.`}),
 });
