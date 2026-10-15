@@ -3,12 +3,14 @@ import admin from "firebase-admin";
 
 const nowTs = () => admin.firestore.FieldValue.serverTimestamp();
 
-import { createZoomMeeting } from "../services/createZoomMeeting.js";
+import { createZoomMeeting, deleteZoomMeeting } from "../services/createZoomMeeting.js";
+import { isDateString, toDateTime } from "../timeslots/slotUtils.timeslots.js";
 
 export const createAppointment = async (req, res) => {
+  let createdMeetingId;
   try {
     const user = req.user;
-    if (!user) return res.status(401).json({ message: "Unauthorized" });
+    if (!user?.uid || user.role !== "user") return res.status(403).json({ message: "User sign-in required" });
 
     const {
       counsellorId,
@@ -37,13 +39,8 @@ export const createAppointment = async (req, res) => {
     const [slotStart, slotEnd] = timeSlot.split("-");
     // const slotStartDateTime = new Date(`${date}T${slotStart}:00`);
 
-    const [hour, minute] = slotStart.split(":").map(Number);
-
-    const slotStartDateTime = new Date();
-    const [year, month, day] = date.split("-").map(Number);
-
-    slotStartDateTime.setFullYear(year, month - 1, day);
-    slotStartDateTime.setHours(hour, minute, 0, 0);
+    if (!isDateString(date) || !/^([01]\d|2[0-3]):[0-5]\d-([01]\d|2[0-3]):[0-5]\d$/.test(timeSlot) || slotEnd <= slotStart) return res.status(400).json({ message: "Invalid date or time slot" });
+    const slotStartDateTime = toDateTime(date, slotStart);
 
     // Check if selected slot start time is in the past (LOCAL TIME SAFE)
     if (slotStartDateTime.getTime() <= Date.now()) {
@@ -80,7 +77,7 @@ export const createAppointment = async (req, res) => {
       null;
 
     // Reject if counsellor has not set pricing
-    if (!sessionPrice || isNaN(Number(sessionPrice))) {
+    if (!Number.isFinite(Number(sessionPrice)) || Number(sessionPrice) <= 0) {
       return res.status(400).json({
         message: "Counsellor has not set a valid session price",
       });
@@ -104,6 +101,7 @@ export const createAppointment = async (req, res) => {
 
     const slotRef = slotQuerySnap.docs[0].ref;
     const slotData = slotQuerySnap.docs[0].data();
+    if (slotData.endTime !== slotEnd) return res.status(400).json({ message: "Invalid session duration" });
 
     // Reject if already booked
     if (slotData.isBooked) {
@@ -126,6 +124,7 @@ export const createAppointment = async (req, res) => {
       timeSlot,
       "Counselling Session"
     );
+    createdMeetingId = zoomMeeting.meetingId;
 
     const actualZoomLink = zoomMeeting.joinUrl;
 
@@ -147,6 +146,7 @@ export const createAppointment = async (req, res) => {
       date,
       timeSlot,
       zoomLink: actualZoomLink,
+      zoomMeetingId: String(zoomMeeting.meetingId),
 
       amount: Number(sessionPrice),
       meta,
@@ -171,7 +171,9 @@ export const createAppointment = async (req, res) => {
       updatedAt: nowTs(),
     };
 
-    const batch = adminDb.batch();
+    await adminDb.runTransaction(async batch => {
+    const current = await batch.get(slotRef);
+    if (!current.exists || current.data().isBooked || current.data().endTime !== slotEnd) throw Object.assign(new Error("This time slot is already booked or unavailable"), { statusCode: 409 });
 
     batch.set(appointmentRef, payload);
     batch.set(
@@ -199,10 +201,11 @@ export const createAppointment = async (req, res) => {
     batch.update(slotRef, {
       isBooked: true,
       bookedBy: user.uid,
+      bookedAppointmentId: appointmentId,
       bookedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    await batch.commit();
+    });
 
     return res.status(201).json({
       success: true,
@@ -210,9 +213,10 @@ export const createAppointment = async (req, res) => {
       appointment: payload,
     });
   } catch (err) {
+    if (err.statusCode === 409 && createdMeetingId) await deleteZoomMeeting(createdMeetingId).catch(() => console.error("Could not delete a superseded Zoom meeting"));
     console.error("createAppointment error:", err);
     return res
-      .status(500)
-      .json({ message: "Internal server error", error: err.message });
+      .status(err.statusCode || 500)
+      .json({ message: err.statusCode ? err.message : "Internal server error" });
   }
 };

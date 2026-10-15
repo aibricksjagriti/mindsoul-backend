@@ -20,7 +20,10 @@ export async function createZoomMeeting(counsellorZoomEmail, date, time, topic =
 
   // Combine date + time into Zoom format (ISO)
   const cleanTime = time.trim().substring(0,5); // HH:MM
-const start_time = new Date(`${date}T${cleanTime}:00`).toISOString();
+const start_time = new Date(`${date}T${cleanTime}:00+05:30`).toISOString();
+  const endTime = time.split("-")[1]?.trim();
+  const duration = endTime ? (new Date(`${date}T${endTime}:00+05:30`) - new Date(start_time)) / 60000 : 45;
+  if (!Number.isFinite(duration) || duration <= 0) throw new Error("Invalid session duration");
 
   // Get Zoom access token
   const token = await getZoomAccessToken();
@@ -34,7 +37,7 @@ const start_time = new Date(`${date}T${cleanTime}:00`).toISOString();
     type: 2, // scheduled meeting
     start_time,
     timezone: "Asia/Kolkata",
-    duration: 45, // minutes (adjust if needed)
+    duration,
     settings: {
       host_video: true,
       participant_video: true,
@@ -45,6 +48,7 @@ const start_time = new Date(`${date}T${cleanTime}:00`).toISOString();
   };
 
   const res = await axios.post(url, payload, {
+    timeout: 20000,
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
@@ -56,5 +60,10 @@ const start_time = new Date(`${date}T${cleanTime}:00`).toISOString();
     joinUrl: res.data.join_url,
     startUrl: res.data.start_url,
   };
+}
+
+export async function deleteZoomMeeting(meetingId) {
+  const token = await getZoomAccessToken();
+  await axios.delete(`https://api.zoom.us/v2/meetings/${encodeURIComponent(meetingId)}`, { timeout: 15000, headers: { Authorization: `Bearer ${token}` } });
 }
 

@@ -75,3 +75,11 @@ Firestore rule enforcement, actual transaction contention, cross-site cookie beh
 and live Zoom/Razorpay flows still need staging verification. Apply backend/frontend
 changes and Firestore rules together; the frontend now uses `/api/auth/logout` and
 depends on authorized schedule generation rather than public slot refresh.
+
+## October 15, 2026 - payment/email changes explicitly authorized
+
+The owner lifted the no-payment-edits rule for confirmation emails and related
+confirmed defects. See BOOKING_EMAIL_FIX.md for implemented changes, 58 backend
+regression tests, 16 frontend tests, deployment requirements and evidence limits.
+These local changes have not been deployed; previous protected-code statements
+apply to the earlier release only.

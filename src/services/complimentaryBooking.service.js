@@ -95,6 +95,7 @@ export const createComplimentaryBookingService = ({ db, fieldValue, createMeetin
         transaction.update(userRef.collection("appointments").doc(id), update);
         transaction.update(counsellorRef.collection("appointments").doc(id), update);
         transaction.set(db.collection("complimentaryMeetingHosts").doc(id), { counsellorId, meetingId: meeting.id });
+        for (const role of ["user", "counsellor"]) transaction.set(db.collection("complimentaryNotifications").doc(`${id}_${role}`), { appointmentId: id, role, status: "pending", attempts: 0 });
       });
     } catch (error) {
       const current = await appointmentRef.get();

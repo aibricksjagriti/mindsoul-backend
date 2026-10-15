@@ -1,99 +1,32 @@
-import admin from "firebase-admin";
+﻿import admin from "firebase-admin";
 import { adminDb } from "../config/firebase.js";
 
 export const cleanupExpiredAppointments = async (req, res) => {
   try {
     const now = admin.firestore.Timestamp.now();
-
-    // 1. Find expired pending appointments
-    const snap = await adminDb
-      .collection("appointments")
-      .where("paymentStatus", "==", "pending")
-      .where("paymentExpiresAt", "<", now)
-      .get();
-
-    if (snap.empty) {
-      return res.status(200).json({
-        success: true,
-        message: "No expired appointments to clean",
-        cleaned: 0,
-      });
-    }
-
-    let cleanedCount = 0;
-    const batch = adminDb.batch();
-
+    const snap = await adminDb.collection("appointments").where("paymentStatus", "==", "pending").where("paymentExpiresAt", "<", now).get();
+    let cleaned = 0;
     for (const doc of snap.docs) {
-      const apt = doc.data();
-
-      if (apt.paymentStatus !== "pending") {
-        console.log("Skipping non-pending appointment:", doc.id);
-        continue;
-      }
-
-      //skip malformed data
-      if (!apt || !apt.timeSlot || !apt.counsellorId || !apt.date) {
-        console.warn("Skipping malformed appointment:", doc.id);
-        continue;
-      }
-
-      // 2. Extract slot start safely
-      const slotStart = apt.timeSlot.split("-")[0]?.trim();
-      if (!slotStart) {
-        console.warn("Invalid timeSlot format, skipping:", doc.id);
-        continue;
-      }
-
-      // 3. Find matching slot (if exists)
-      const slotSnap = await adminDb
-        .collection("timeSlots")
-        .where("counsellorId", "==", apt.counsellorId)
-        .where("date", "==", apt.date)
-        .where("startTime", "==", slotStart)
-        .limit(1)
-        .get();
-
-      // 4. Release slot ONLY if this appointment owns it
-      if (!slotSnap.empty) {
-        const slotDoc = slotSnap.docs[0];
-        const slotData = slotDoc.data();
-
-        //SAFETY: only release if this appointment booked it
-        if (slotData.bookedBy === apt.studentId) {
-          batch.update(slotDoc.ref, {
-            isBooked: false,
-            bookedBy: admin.firestore.FieldValue.delete(),
-            bookedAt: admin.firestore.FieldValue.delete(),
-          });
-        } else {
-          console.warn("Skipping slot release (ownership mismatch):", doc.id);
+      const changed = await adminDb.runTransaction(async tx => {
+        const fresh = await tx.get(doc.ref);
+        const apt = fresh.data();
+        if (!apt || apt.paymentStatus !== "pending" || !apt.paymentExpiresAt || apt.paymentExpiresAt.toMillis() >= now.toMillis() || !apt.timeSlot || !apt.counsellorId || !apt.studentId) return false;
+        const slots = await tx.get(adminDb.collection("timeSlots").where("counsellorId", "==", apt.counsellorId).where("date", "==", apt.date).where("startTime", "==", apt.timeSlot.split("-")[0].trim()));
+        for (const slot of slots.docs) {
+          const data = slot.data();
+          // Legacy reservations have no appointment ID; don't release ambiguous ownership.
+          if (data.bookedAppointmentId === doc.id) tx.update(slot.ref, { isBooked: false, bookedBy: admin.firestore.FieldValue.delete(), bookedAppointmentId: admin.firestore.FieldValue.delete(), bookedAt: admin.firestore.FieldValue.delete() });
         }
-      }
-
-      // 5. Mark appointment as expired
-      batch.update(doc.ref, {
-        status: "cancelled_expired",
-        paymentStatus: "expired",
-        paymentExpiresAt: null,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        const update = { status: "cancelled_expired", paymentStatus: "expired", paymentExpiresAt: null, updatedAt: admin.firestore.FieldValue.serverTimestamp() };
+        tx.update(doc.ref, update);
+        tx.set(adminDb.collection("users").doc(apt.studentId).collection("appointments").doc(doc.id), update, { merge: true });
+        tx.set(adminDb.collection("counsellors").doc(apt.counsellorId).collection("appointments").doc(doc.id), update, { merge: true });
+        return true;
       });
-
-      cleanedCount++;
+      if (changed) cleaned++;
     }
-
-    await batch.commit();
-
-    return res.status(200).json({
-      success: true,
-      message: "Expired appointments cleaned successfully",
-      cleaned: cleanedCount,
-    });
-  } catch (err) {
-    console.error("Cleanup expired appointments error:", err);
-    return res.status(500).json({
-      success: false,
-      message: "Cleanup failed",
-      error: err.message, // helpful in logs
-    });
+    res.json({ success: true, cleaned, message: "Expired appointments checked" });
+  } catch {
+    res.status(500).json({ success: false, message: "Cleanup failed" });
   }
 };

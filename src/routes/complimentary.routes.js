@@ -5,6 +5,7 @@ import { authenticate } from "../middlewares/auth.middlewares.js";
 import { requireAdmin } from "../middlewares/requireAdmin.middlewares.js";
 import { createComplimentaryBookingService, complimentaryBookingId } from "../services/complimentaryBooking.service.js";
 import { createComplimentaryMeeting, getComplimentaryHostLink, deleteComplimentaryMeeting } from "../services/complimentaryMeeting.service.js";
+import { notifyComplimentaryBooking } from "../services/complimentaryMail.service.js";
 
 const router = express.Router();
 const service = createComplimentaryBookingService({ db, fieldValue: admin.firestore.FieldValue, createMeeting: createComplimentaryMeeting, deleteMeeting: deleteComplimentaryMeeting });
@@ -13,7 +14,20 @@ router.get("/eligibility", async (req, res, next) => {
   try { res.json({ success: true, ...await service.eligibility(req.user) }); } catch (error) { next(error); }
 });
 router.post("/appointments", async (req, res, next) => {
-  try { res.status(201).json({ success: true, appointment: await service.book(req.user, req.body) }); } catch (error) { next(error); }
+  try {
+    const appointment = await service.book(req.user, req.body);
+    const notifications = await notifyComplimentaryBooking(appointment.id);
+    res.status(201).json({ success: true, appointment, notifications });
+  } catch (error) { next(error); }
+});
+router.post("/appointments/:id/notifications/retry", async (req, res, next) => {
+  try {
+    const snapshot = await db.collection("appointments").doc(req.params.id).get();
+    const record = snapshot.data();
+    if (!snapshot.exists || record.bookingType !== "complimentary" || !((req.user.role === "user" && record.studentId === req.user.uid) || (req.user.role === "counsellor" && record.counsellorId === req.user.counsellorId) || req.user.role === "admin")) return res.status(403).json({ success: false, message: "Access denied" });
+    if (record.status !== "scheduled") return res.status(409).json({ success: false, message: "Appointment is not confirmed" });
+    res.json({ success: true, notifications: await notifyComplimentaryBooking(req.params.id) });
+  } catch (error) { next(error); }
 });
 router.get("/requests/:requestId", async (req, res, next) => {
   try {
