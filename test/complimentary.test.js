@@ -1,6 +1,70 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createComplimentaryBookingService } from "../src/services/complimentaryBooking.service.js";
+import { createComplimentaryNotifications } from "../src/services/complimentaryNotifications.service.js";
+
+test("free booking confirmations reach both recipients with correct links and replay skips accepted sends", async () => {
+  const { db, service } = setup();
+  const booking = await service.book(user, input);
+  db.rows.get("counsellors/c").email = "counsellor@example.invalid";
+  db.rows.get(`appointments/${booking.id}`).studentEmail = "old-address@example.invalid";
+  const messages = [];
+  const notify = createComplimentaryNotifications({ db, frontendUrl: "https://www.themindsoul.com", sendMail: async message => { messages.push(message); return { accepted: [message.to], rejected: [] }; } });
+  assert.deepEqual(await notify(booking.id), { user: "sent", counsellor: "sent" });
+  await notify(booking.id);
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0].to, user.email);
+  assert.match(messages[0].text, /https:\/\/zoom.us\/j\/preview/);
+  assert.match(messages[1].text, /https:\/\/www.themindsoul.com\/counsellor-dashboard/);
+  assert.doesNotMatch(messages[1].text, /HOST-SECRET/);
+  assert.match(messages[1].text, /Zoom join link: https:\/\/zoom.us\/j\/preview/);
+  assert.match(messages[0].text, /09:00-10:00 IST/);
+});
+
+test("failed confirmation can retry without resending accepted counsellor email or changing booking", async () => {
+  const { db, service } = setup(); const booking = await service.book(user, input);
+  db.rows.get("counsellors/c").email = "counsellor@example.invalid";
+  let failUser = true; const sent = [];
+  const notify = createComplimentaryNotifications({ db, frontendUrl: "https://www.themindsoul.com", sendMail: async m => { if (m.to === user.email && failUser) throw new Error("SMTP unavailable"); sent.push(m.to); return { accepted: [m.to] }; } });
+  assert.deepEqual(await notify(booking.id), { user: "failed", counsellor: "sent" });
+  failUser = false;
+  assert.deepEqual(await notify(booking.id), { user: "sent", counsellor: "sent" });
+  assert.deepEqual(sent, ["counsellor@example.invalid", user.email]);
+  assert.equal(db.rows.get(`appointments/${booking.id}`).status, "scheduled");
+});
+
+test("simultaneous confirmation retries do not send twice", async () => {
+  const { db, service } = setup(); const booking = await service.book(user, input);
+  db.rows.get("counsellors/c").email = "counsellor@example.invalid";
+  const sent = [];
+  const notify = createComplimentaryNotifications({ db, frontendUrl: "https://www.themindsoul.com", sendMail: async m => { sent.push(m.to); return { accepted: [m.to] }; } });
+  await Promise.all([notify(booking.id), notify(booking.id)]);
+  assert.equal(sent.length, 2);
+});
+
+test("complimentary notifier rejects paid appointments and SMTP rejection remains retryable", async () => {
+  const { db, service } = setup(); const booking = await service.book(user, input);
+  let sends = 0;
+  const notify = createComplimentaryNotifications({ db, frontendUrl: "https://www.themindsoul.com", sendMail: async () => { sends++; return { accepted: [], rejected: ["invalid"] }; } });
+  assert.deepEqual(await notify(booking.id), { user: "failed", counsellor: "failed" });
+  assert.equal(sends, 1);
+  db.rows.get(`appointments/${booking.id}`).bookingType = "paid";
+  await assert.rejects(notify(booking.id), { statusCode: 409 });
+  assert.equal(sends, 1);
+});
+
+test("expired send leases recover and appointment details are HTML escaped", async () => {
+  const { db, service } = setup(); const booking = await service.book(user, input);
+  db.rows.get("counsellors/c").email = "counsellor@example.invalid";
+  db.rows.get(`appointments/${booking.id}`).date = '<img src=x onerror="bad()">';
+  db.rows.set(`complimentaryNotifications/${booking.id}_user`, { status: "sending", leaseUntil: 1, attempts: 1 });
+  const messages = [];
+  const notify = createComplimentaryNotifications({ db, now: () => 1000, frontendUrl: "https://www.themindsoul.com", sendMail: async m => { messages.push(m); return { accepted: [m.to] }; } });
+  assert.deepEqual(await notify(booking.id), { user: "sent", counsellor: "sent" });
+  assert.match(messages[0].html, /&lt;img/);
+  assert.doesNotMatch(messages[0].html, /<img/);
+  assert.equal(db.rows.get(`complimentaryNotifications/${booking.id}_user`).attempts, 2);
+});
 
 const DELETE = Symbol("delete");
 class Store {

@@ -27,6 +27,6 @@ router.get("/users", authenticate, requireAdmin, getAllUsersAdmin);
 router.get("/appointments", authenticate, requireAdmin, getAllAppointmentsAdmin);
 
 // Cron cleanup (kept from original)
-router.post("/cleanup-expired-appointments", cleanupExpiredAppointments);
+router.post("/cleanup-expired-appointments", authenticate, requireAdmin, cleanupExpiredAppointments);
 
 export default router;

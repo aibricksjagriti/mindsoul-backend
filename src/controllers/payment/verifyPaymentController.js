@@ -51,14 +51,9 @@ export const verifyRazorpayPayment = async (req, res) => {
     }
 
     const aptData = aptSnap.data();
+    if (!req.user?.uid || req.user.role !== "user" || aptData.studentId !== req.user.uid) return res.status(403).json({ success: false, message: "You cannot verify another user's appointment" });
 
-    // Idempotency awareness (soft guard)
-    if (aptData.paymentStatus === "success") {
-      return res.status(200).json({
-        success: true,
-        message: "Payment already processed",
-      });
-    }
+    if (aptData.bookingType === "complimentary" || (aptData.razorpayOrderId || aptData.orderId) !== razorpay_order_id) return res.status(400).json({ success: false, message: "Order does not belong to appointment" });
 
     /* --------------------------------------------------
        2. Verify Razorpay signature
@@ -68,7 +63,7 @@ export const verifyRazorpayPayment = async (req, res) => {
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    if (expectedSignature !== razorpay_signature) {
+    if (typeof razorpay_signature !== "string" || !/^[a-f0-9]{64}$/i.test(razorpay_signature) || !crypto.timingSafeEqual(Buffer.from(expectedSignature, "hex"), Buffer.from(razorpay_signature, "hex"))) {
       return res
         .status(400)
         .json({ success: false, message: "Invalid signature" });
@@ -79,6 +74,7 @@ export const verifyRazorpayPayment = async (req, res) => {
     -------------------------------------------------- */
     const order = await razorpay.orders.fetch(razorpay_order_id);
     let payment = await razorpay.payments.fetch(razorpay_payment_id);
+    if (order.notes?.appointmentId !== appointmentId || order.currency !== "INR" || payment.currency !== "INR" || !Number.isFinite(Number(aptData.amount)) || Number(aptData.amount) <= 0 || order.amount !== Math.round(Number(aptData.amount) * 100) || payment.amount !== order.amount || (aptData.paymentStatus === "success" && (aptData.paymentId || aptData.paymentDetails?.paymentId) !== razorpay_payment_id)) return res.status(400).json({ success: false, message: "Payment does not match appointment" });
 
     if (payment.order_id !== razorpay_order_id) {
       return res

@@ -3,11 +3,7 @@ import { db as adminDb } from "../../config/firebase.js";
 import admin from "firebase-admin";
 import { razorpay } from "../../services/razorpayClient.js";
 
-import { emailClient, sendEmail } from "../../services/emailService.js";
-import { userPaymentReceiptTemplate } from "../../utils/userPaymentReceiptTemplate.js";
-import { counsellorPaymentReceiptTemplate } from "../../utils/counsellorPaymentReceiptTemplate.js";
-import { appointmentConfirmationTemplate } from "../../utils/appointmentConfirmation.js";
-import { counsellorNotificationTemplate } from "../../utils/counsellorNotification.js";
+import { notifyPaidBooking } from "../../services/paidBookingMail.service.js";
 
 const WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || "";
 
@@ -33,19 +29,14 @@ export const razorpayWebhook = async (req, res) => {
     if (!signature) {
       return res.status(400).send("No signature header");
     }
+    if (!WEBHOOK_SECRET) return res.status(503).send("Webhook is not configured");
 
     const expected = crypto
       .createHmac("sha256", WEBHOOK_SECRET)
       .update(rawBody)
       .digest("hex");
 
-    if (expected !== signature) {
-      console.error("Webhook signature mismatch", {
-        expected,
-        received: signature,
-        bodyLength: rawBody?.length,
-        hint: "Check RAW body / secret mismatch / middleware order",
-      });
+    if (typeof signature !== "string" || !/^[a-f0-9]{64}$/i.test(signature) || !crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(signature, "hex"))) {
       return res.status(400).send("Invalid signature");
     }
 
@@ -62,6 +53,7 @@ export const razorpayWebhook = async (req, res) => {
     ============================================================ */
     const event = payload.event;
     const payment = payload.payload?.payment?.entity;
+    if (!["payment.captured", "payment.authorized", "payment.failed"].includes(event)) return res.status(200).send("Ignored event");
 
     // Top-Level Event Logging for visibility
     console.log("WEBHOOK RECEIVED", {
@@ -78,7 +70,8 @@ export const razorpayWebhook = async (req, res) => {
     /* ============================================================
       3  RESOLVE appointmentId FROM NOTES (Zero external API dependencies constraint)
     ============================================================ */
-    const appointmentId = payment?.notes?.appointmentId;
+    const order = payment.order_id ? await razorpay.orders.fetch(payment.order_id) : null;
+    const appointmentId = payment?.notes?.appointmentId || order?.notes?.appointmentId;
 
     //safety check
     if (!appointmentId) {
@@ -100,7 +93,14 @@ export const razorpayWebhook = async (req, res) => {
       return res.status(200).send("OK");
     }
 
-    const aptData = aptSnap.data();
+    let aptData = aptSnap.data();
+    const storedOrder = aptData.razorpayOrderId || aptData.orderId;
+    if (aptData.bookingType === "complimentary" || !storedOrder || storedOrder !== payment.order_id || order?.notes?.appointmentId !== appointmentId ||
+        !Number.isFinite(Number(aptData.amount)) || Number(aptData.amount) <= 0 || Math.round(Number(aptData.amount) * 100) !== payment.amount || order.amount !== payment.amount ||
+        payment.currency !== "INR" || order.currency !== "INR") {
+      console.error("Payment webhook appointment binding mismatch", { appointmentId });
+      return res.status(400).send("Payment does not match appointment");
+    }
 
     /* ============================================================
        5 IDEMPOTENCY GUARD
@@ -114,13 +114,19 @@ export const razorpayWebhook = async (req, res) => {
         appointmentId,
         paymentId: payment.id,
       });
-      return res.status(200).send("OK");
+      if ((aptData.paymentId || aptData.paymentDetails?.paymentId) !== payment.id) return res.status(409).send("Different payment already recorded");
+      if (event !== "payment.captured" || payment.status !== "captured") return res.status(200).send("OK");
+      if (aptData.fulfillmentComplete) {
+        await notifyPaidBooking(appointmentId);
+        return res.status(200).send("OK");
+      }
     }
 
     /* ============================================================
        6️ HANDLE PAYMENT CAPTURED
     ============================================================ */
     if (event === "payment.captured") {
+      if (payment.status !== "captured") return res.status(400).send("Payment is not captured");
       //compute paid amount in rupees from Razorpay (paise → rupees)
       const paidAmountRupees = Number(payment.amount) / 100;
 
@@ -139,13 +145,30 @@ export const razorpayWebhook = async (req, res) => {
         7 UPDATE APPOINTMENT
       ------------------------------------------------------------ */
 
-      await appointmentRef.update({
+      await adminDb.runTransaction(async (batch) => {
+      const fresh = await batch.get(appointmentRef);
+      aptData = fresh.data();
+      if (!aptData || (aptData.paymentStatus === "success" && (aptData.paymentId || aptData.paymentDetails?.paymentId) !== payment.id)) throw Object.assign(new Error("Payment state changed"), { statusCode: 409 });
+      const matchingSlots = await batch.get(adminDb.collection("timeSlots").where("counsellorId", "==", aptData.counsellorId).where("date", "==", aptData.date).where("startTime", "==", aptData.timeSlot.split("-")[0].trim()));
+      const slot = matchingSlots.docs.find(doc => doc.data().endTime === aptData.timeSlot.split("-")[1].trim());
+      const slotData = slot?.data();
+      const queuedEmails = await Promise.all(["user", "counsellor", "user_receipt", "counsellor_receipt"].map(kind => batch.get(adminDb.collection("bookingNotifications").doc(`${appointmentId}_${kind}`))));
+      if ((aptData.razorpayOrderId || aptData.orderId) !== payment.order_id || Math.round(Number(aptData.amount) * 100) !== payment.amount) throw Object.assign(new Error("Payment binding changed"), { statusCode: 409 });
+      if (!slot || (slotData.isBooked && (slotData.bookedAppointmentId ? slotData.bookedAppointmentId !== appointmentId : slotData.bookedBy !== aptData.studentId))) {
+        console.error("Captured payment requires manual booking review", { appointmentId, paymentId: payment.id });
+        throw Object.assign(new Error("Slot reservation no longer available"), { statusCode: 409 });
+      }
+      batch.update(slot.ref, { isBooked: true, bookedBy: aptData.studentId, bookedAppointmentId: appointmentId });
+      for (const [index, kind] of ["user", "counsellor", "user_receipt", "counsellor_receipt"].entries()) if (!queuedEmails[index].exists) batch.set(adminDb.collection("bookingNotifications").doc(`${appointmentId}_${kind}`), { appointmentId, kind, status: "pending", attempts: 0 });
+      batch.update(appointmentRef, {
         //Appointment state
         status: "scheduled",
         paymentStatus: "success",
+        fulfillmentComplete: true,
 
         //clear expiry timing
         paymentExpiresAt: null,
+        ttlDeleteAt: admin.firestore.FieldValue.delete(),
 
         //Top-level payment fields
         orderId: payment.order_id,
@@ -186,10 +209,7 @@ export const razorpayWebhook = async (req, res) => {
       const webhookCounsellorName =
         `${counsellorProfile.firstName || ""} ${counsellorProfile.lastName || ""}`.trim() || null;
 
-      await adminDb
-        .collection("payments")
-        .doc(payment.id)
-        .set(
+      batch.set(adminDb.collection("payments").doc(payment.id),
           {
             paymentId: payment.id,
             orderId: payment.order_id,
@@ -213,145 +233,32 @@ export const razorpayWebhook = async (req, res) => {
           { merge: true },
         );
 
-      await adminDb
-        .collection("counsellors")
-        .doc(aptData.counsellorId)
-        .collection("appointments")
-        .doc(appointmentId)
-        .set(
+      batch.set(adminDb.collection("counsellors").doc(aptData.counsellorId).collection("appointments").doc(appointmentId),
           {
             paymentStatus: "success",
             status: "scheduled",
+            paymentExpiresAt: null,
+            ttlDeleteAt: admin.firestore.FieldValue.delete(),
             updatedAt: new Date(),
           },
           { merge: true },
         );
 
       if (aptData.studentId) {
-        await adminDb
-          .collection("users")
-          .doc(aptData.studentId)
-          .collection("appointments")
-          .doc(appointmentId)
-          .set(
+        batch.set(adminDb.collection("users").doc(aptData.studentId).collection("appointments").doc(appointmentId),
             {
               paymentStatus: "success",
               status: "scheduled",
+              paymentExpiresAt: null,
+              ttlDeleteAt: admin.firestore.FieldValue.delete(),
               updatedAt: new Date(),
             },
             { merge: true },
           );
       }
 
-      // SEND EMAILS (Fire and Forget)
-      try {
-        let studentName = aptData.studentName || null;
-        if (!studentName && aptData.studentId) {
-          const userSnap = await adminDb.collection("users").doc(aptData.studentId).get();
-          if (userSnap.exists) {
-            const u = userSnap.data();
-            studentName = u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || null;
-          }
-        }
-        
-        const userNameForMail = studentName || aptData.studentEmail || "User";
-        let counsellorName = webhookCounsellorName || "Counsellor";
-
-        const emailPromises = [];
-
-        // User appointment email
-        if (aptData.studentEmail) {
-          const userHtml = appointmentConfirmationTemplate({
-            studentName: userNameForMail,
-            counsellorName: counsellorName,
-            date: aptData.date,
-            timeSlot: aptData.timeSlot,
-            zoomLink: aptData.zoomLink,
-          });
-
-          emailPromises.push(
-            emailClient.sendMail({
-              from: `MINDSOUL <${process.env.MAIL_USER}>`,
-              to: aptData.studentEmail,
-              subject: "Hello User, Your Counselling Appointment is Confirmed",
-              html: userHtml,
-            })
-          );
-
-          emailPromises.push(
-            sendEmail({
-              to: aptData.studentEmail,
-              subject: "Payment Receipt – MINDSOUL",
-              html: userPaymentReceiptTemplate({
-                studentName: userNameForMail,
-                paymentId: payment.id,
-                orderId: payment.order_id,
-                amount: paidAmountRupees.toFixed(2),
-                date: new Date().toLocaleString(),
-              }),
-            })
-          );
-        }
-
-        // Counsellor appointment email
-        let counsellorEmail = aptData.counsellorEmail || null;
-        if (!counsellorEmail && aptData.counsellorId) {
-          const cSnap = await adminDb.collection("counsellors").doc(aptData.counsellorId).get();
-          if (cSnap.exists) {
-            counsellorEmail = cSnap.data()?.email || null;
-            if (!counsellorName || counsellorName === "Counsellor") {
-                const c = cSnap.data();
-                counsellorName = `${c.profileData?.firstName || ""} ${c.profileData?.lastName || ""}`.trim() || "Counsellor";
-            }
-          }
-        }
-
-        if (counsellorEmail) {
-          const counsellorHtml = counsellorNotificationTemplate({
-            counsellorName: counsellorName,
-            studentName: userNameForMail,
-            studentEmail: aptData.studentEmail,
-            date: aptData.date,
-            timeSlot: aptData.timeSlot,
-            startUrl: aptData.zoomLink,
-          });
-
-          emailPromises.push(
-            emailClient.sendMail({
-              from: `MINDSOUL <${process.env.MAIL_USER}>`,
-              to: counsellorEmail,
-              subject: "Hello Counsellor, You have a new appointment",
-              html: counsellorHtml,
-            })
-          );
-
-          emailPromises.push(
-            sendEmail({
-              to: counsellorEmail,
-              subject: "Payment Processed – MINDSOUL",
-              html: counsellorPaymentReceiptTemplate({
-                counsellorName: counsellorName,
-                studentName: userNameForMail,
-                paymentId: payment.id,
-                orderId: payment.order_id,
-                amount: paidAmountRupees.toFixed(2),
-                date: new Date().toLocaleString(),
-              }),
-            })
-          );
-        }
-
-        // Execute background emails completely unbound from the thread safely catching rejections
-        Promise.allSettled(emailPromises).then((results) => {
-          results.forEach((r, i) => {
-            if (r.status === "rejected") {
-              console.error(`Email promise ${i} failed:`, r.reason);
-            }
-          });
-        });
-      } catch (emailErr) {
-        console.error("Webhook Email sending configuration failed:", emailErr);
-      }
+      });
+      await notifyPaidBooking(appointmentId);
 
       return res.status(200).send("OK");
     }
@@ -365,9 +272,8 @@ export const razorpayWebhook = async (req, res) => {
         await razorpay.payments.capture(payment.id, payment.amount);
         console.log(`Payment ${payment.id} explicitly captured by webhook`);
       } catch (err) {
-        if (err.error?.code !== "BAD_REQUEST_ERROR") {
-          console.error("Failed to explicit capture payment in webhook:", err, payment.id);
-        }
+        const actual = await razorpay.payments.fetch(payment.id);
+        if (actual.status !== "captured") throw err;
       }
       return res.status(200).send("OK");
     }
@@ -378,10 +284,10 @@ export const razorpayWebhook = async (req, res) => {
 
     if (event === "payment.failed") {
       //save failure info
-      await appointmentRef.update({
-        paymentStatus: "failed",
-        "meta.status": "payment_failed",
-        updatedAt: new Date(),
+      await adminDb.runTransaction(async transaction => {
+        const fresh = await transaction.get(appointmentRef);
+        if (!fresh.exists || fresh.data().paymentStatus === "success") return;
+        transaction.update(appointmentRef, { paymentStatus: "failed", "meta.status": "payment_failed", updatedAt: new Date() });
       });
 
       /* ============================================================
@@ -394,6 +300,6 @@ export const razorpayWebhook = async (req, res) => {
     res.status(200).send("OK");
   } catch (err) {
     console.error("Webhook handler error:", err);
-    res.status(500).send("Server error");
+    res.status(err.statusCode === 503 ? 503 : 500).send("Server error");
   }
 };
